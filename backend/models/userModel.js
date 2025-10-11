@@ -1,14 +1,62 @@
 const pool = require("../config/db");
+const bcrypt = require("bcryptjs");
 
-// Tạo user mới
-const createUser = async (user) => {
-  const { username, password_hash, gender, email, dob, phone } = user;
-  const [result] = await pool.query(
-    `INSERT INTO users (username, password_hash, gender, email, dob, phone)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [username, password_hash, gender, email, dob, phone]
-  );
-  return result.insertId;
+// Chỉ tạo user + role mặc định (password đã hash trước khi truyền vào)
+const createUser = async (
+  username,
+  passwordHash,
+  gender,
+  email,
+  dob,
+  phone
+) => {
+  const query = `
+    INSERT INTO users (username, password_hash, gender, email, dob, phone)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  const [result] = await pool.query(query, [
+    username,
+    passwordHash,
+    gender,
+    email,
+    dob,
+    phone,
+  ]);
+
+  const userId = result.insertId;
+
+  // Gán role mặc định là reader (id = 3)
+  await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES (?, 3)`, [
+    userId,
+  ]);
+
+  return userId;
+};
+
+// ====== 2. Thủ thư thêm user ======
+// Không nhập mật khẩu, mặc định là "000000"
+const createUserByLibrarian = async (username, gender, email, dob, phone) => {
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash("000000", salt);
+
+  return await createUser(username, hashedPassword, gender, email, dob, phone);
+};
+
+// ====== 3. Đăng ký user (người đọc) ======
+// Người dùng nhập mật khẩu → hash rồi gọi lại createUser
+const registerUser = async (username, gender, email, dob, phone, password) => {
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
+  return await createUser(username, hashedPassword, gender, email, dob, phone);
+};
+
+// ====== 4. Lấy user theo email ======
+const getUserByEmail = async (email) => {
+  const [rows] = await pool.query(`SELECT * FROM users WHERE email = ?`, [
+    email,
+  ]);
+  return rows[0];
 };
 
 // Lấy tất cả users
@@ -52,7 +100,10 @@ const deleteUser = async (id) => {
 };
 
 module.exports = {
+  createUserByLibrarian,
+  registerUser,
   createUser,
+  getUserByEmail,
   getAllUsers,
   getUserById,
   updateUser,

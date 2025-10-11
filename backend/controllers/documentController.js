@@ -30,14 +30,6 @@
  */
 const db = require("../config/db");
 
-exports.getBooks = (req, res) => {
-  // db.query("SELECT * FROM books", (err, results) => {
-  //     if (err) return res.status(500).json({ error: err });
-  //     res.json(results);
-  // });
-  console.log("chay duoc");
-};
-
 const Document = require("../models/documentModel");
 
 // @desc    Add a new document
@@ -153,12 +145,15 @@ const deleteDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Chuyển trạng thái is_active thành false
-    const updatedDoc = await Document.updateDocument(id, { is_active: false });
+    // Gọi model deleteDocument (chỉ update is_active)
+    const deleted = await Document.deleteDocument(id);
+
+    if (!deleted) {
+      return res.status(500).json({ message: "Failed to delete document" });
+    }
 
     res.json({
       message: "Document deactivated successfully",
-      document: updatedDoc,
     });
   } catch (error) {
     console.error(error);

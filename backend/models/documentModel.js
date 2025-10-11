@@ -57,28 +57,28 @@ const getDocumentsForReaders = async (
 
   // Query dữ liệu chính
   let query = `
-    SELECT d.id, d.name,
-           GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
-           IFNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
-           SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) as available_count,
-           COUNT(bd.id) as total_borrowed
-    FROM documents d
-    LEFT JOIN doc_authors da ON d.id = da.doc_id
-    LEFT JOIN authors a ON da.author_id = a.id
-    LEFT JOIN records r ON d.id = r.doc_id
-    LEFT JOIN borrow_details bd ON r.id = bd.record_id
-    LEFT JOIN reviews rv ON d.id = rv.doc_id
-    WHERE d.is_active = 1
-  `;
+  SELECT d.id, d.name,
+         GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
+         IFNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
+         COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) as available_count,
+         COUNT(DISTINCT bd.id) as total_borrowed
+  FROM documents d
+  LEFT JOIN doc_authors da ON d.id = da.doc_id
+  LEFT JOIN authors a ON da.author_id = a.id
+  LEFT JOIN records r ON d.id = r.doc_id
+  LEFT JOIN borrow_details bd ON r.id = bd.record_id
+  LEFT JOIN reviews rv ON d.id = rv.doc_id
+  WHERE d.is_active = 1
+`;
 
   if (category_id) query += ` AND d.category_id = ${pool.escape(category_id)}`;
   if (search)
     query += ` AND (d.name LIKE ${pool.escape("%" + search + "%")}
-                OR a.name LIKE ${pool.escape("%" + search + "%")})`;
+              OR a.name LIKE ${pool.escape("%" + search + "%")})`;
 
   query += ` GROUP BY d.id `;
 
-  // Sắp xếp theo yêu cầu FE
+  // Sắp xếp
   if (sort === "name_asc") query += " ORDER BY d.name ASC";
   else if (sort === "name_desc") query += " ORDER BY d.name DESC";
   else if (sort === "rating_high") query += " ORDER BY avg_rating DESC";
@@ -88,7 +88,7 @@ const getDocumentsForReaders = async (
   else if (sort === "most_borrowed") query += " ORDER BY total_borrowed DESC";
   else if (sort === "newest") query += " ORDER BY d.published_year DESC";
   else if (sort === "oldest") query += " ORDER BY d.published_year ASC";
-  else query += " ORDER BY d.created_at DESC"; // mặc định mới thêm gần đây nhất
+  else query += " ORDER BY d.created_at DESC"; // mặc định
 
   query += ` LIMIT ${limit} OFFSET ${offset}`;
 
@@ -149,8 +149,8 @@ const getDocumentById = async (id) => {
     SELECT d.id, d.name, d.publisher_id, d.published_year, d.category_id, 
            d.page_nums, d.description, d.is_active,
            GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
-           ISNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
-           SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) as available_count
+           IFNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
+           COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) as available_count
     FROM documents d
     LEFT JOIN doc_authors da ON d.id = da.doc_id
     LEFT JOIN authors a ON da.author_id = a.id
@@ -164,6 +164,7 @@ const getDocumentById = async (id) => {
 
   return rows.length > 0 ? rows[0] : null;
 };
+
 //===========================================================================================
 // lấy danh sách document cho thủ thư (danh mục đầu sách)
 const getDocumentsForLibrarians = async (
