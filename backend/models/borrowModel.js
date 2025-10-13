@@ -1,68 +1,88 @@
 const pool = require("../config/db");
-const { get } = require("../routes/documentRoutes");
-
-// Lấy danh sách sách đã mượn của 1 user
-const getBorrowedBooksByUser = async (userId, page = 1, limit = 10) => {
-  const offset = (page - 1) * limit;
-
-  const [rows] = await pool.query(
-    `
-    SELECT bd.id as borrow_detail_id,
-           d.name as document_name,
-           GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
-           d.cover_image,
-           b.borrow_date,
-           b.due_date,
-           bd.return_date,
-           CASE 
-             WHEN bd.return_date IS NULL AND CURDATE() > b.due_date THEN 'Quá hạn'
-             WHEN bd.return_date IS NULL THEN 'Đang mượn'
-             ELSE 'Đã trả'
-           END as status,
-           CASE 
-             WHEN bd.return_date IS NULL AND CURDATE() > b.due_date 
-             THEN DATEDIFF(CURDATE(), b.due_date) * 5000
-             ELSE 0
-           END as fine
-    FROM borrow_details bd
-    JOIN borrows b ON bd.borrow_id = b.id
-    JOIN records r ON bd.record_id = r.id
-    JOIN documents d ON r.doc_id = d.id
-    LEFT JOIN doc_authors da ON d.id = da.doc_id
-    LEFT JOIN authors a ON da.author_id = a.id
-    WHERE b.user_id = ?
-    GROUP BY bd.id
-    ORDER BY b.borrow_date DESC
-    LIMIT ? OFFSET ?
-  `,
-    [userId, limit, offset]
-  );
-
-  return rows;
-};
 
 // ============ CREATE ============
-// Tạo phiếu mượn mới + chi tiết sách mượn
+// Tạo phiếu mượn mới + chi tiết
 const createBorrow = async (user_id, borrow_date, due_date, recordIds) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // Tạo phiếu mượn
+    // 1. Kiểm tra tổng số sách bạn đọc đang mượn (active)
+    const [[{ currentCount }]] = await conn.query(
+      `
+      SELECT COUNT(bd.id) as currentCount
+      FROM borrow_details bd
+      JOIN borrows b ON bd.borrow_id = b.id
+      WHERE b.user_id = ? 
+        AND b.status = 'active' 
+        AND bd.status = 'on_loan'
+      `,
+      [user_id]
+    );
+
+    if (currentCount + recordIds.length > 6) {
+      throw new Error(
+        "Một bạn đọc chỉ được mượn tối đa 6 quyển tại một thời điểm"
+      );
+    }
+
+    // 2. Tạo phiếu mượn
     const [borrowResult] = await conn.query(
-      `INSERT INTO borrows (user_id, borrow_date, due_date) VALUES (?, ?, ?)`,
+      `INSERT INTO borrows (user_id, borrow_date, due_date, status) 
+       VALUES (?, ?, ?, 'active')`,
       [user_id, borrow_date, due_date]
     );
     const borrowId = borrowResult.insertId;
 
-    // Tạo chi tiết mượn cho từng quyển (record)
-    for (let recordId of recordIds) {
+    // 3. Lặp để thêm chi tiết mượn
+    for (let record of recordIds) {
+      const { recordId, reservationId, reservationDetailId } = record;
+
+      // Kiểm tra record
+      const [[rec]] = await conn.query(
+        `SELECT status FROM records WHERE id = ?`,
+        [recordId]
+      );
+      if (!rec) throw new Error("Record không tồn tại");
+
+      if (reservationId) {
+        if (rec.status !== "on_hold")
+          throw new Error("Sách đặt giữ chưa ở trạng thái on_hold");
+
+        // cập nhật chi tiết giữ sang picked_up
+        await conn.query(
+          `UPDATE reservation_details 
+           SET status = 'picked_up', picked_up_actual_at = ? 
+           WHERE id = ?`,
+          [borrow_date, reservationDetailId]
+        );
+
+        // nếu tất cả chi tiết đã picked_up hoặc cancelled thì reservation completed
+        await conn.query(
+          `
+          UPDATE reservations r 
+          SET status = 'completed'
+          WHERE r.id = ? 
+            AND NOT EXISTS (
+              SELECT 1 FROM reservation_details rd 
+              WHERE rd.reservation_id = r.id 
+              AND rd.status IN ('pending','on_hold')
+            )
+        `,
+          [reservationId]
+        );
+      } else {
+        if (rec.status !== "available") throw new Error("Sách không khả dụng");
+      }
+
+      // Thêm chi tiết mượn
       await conn.query(
-        `INSERT INTO borrow_details (borrow_id, record_id) VALUES (?, ?)`,
-        [borrowId, recordId]
+        `INSERT INTO borrow_details (borrow_id, record_id, reservation_id, status) 
+         VALUES (?, ?, ?, 'on_loan')`,
+        [borrowId, recordId, reservationId || null]
       );
 
-      // Cập nhật trạng thái record sang "on_loan"
+      // Cập nhật record sang on_loan
       await conn.query(`UPDATE records SET status = 'on_loan' WHERE id = ?`, [
         recordId,
       ]);
@@ -79,66 +99,75 @@ const createBorrow = async (user_id, borrow_date, due_date, recordIds) => {
 };
 
 // ============ READ ============
-const getBorrows = async () => {
-  const [rows] = await pool.query(`
-    SELECT b.id, u.name as user_name, b.borrow_date, b.due_date, b.return_date
+// Danh sách phiếu mượn
+const getBorrows = async (fromDate, toDate) => {
+  let query = `
+    SELECT b.id, u.username as user_name, b.borrow_date, b.due_date, b.status
     FROM borrows b
     JOIN users u ON b.user_id = u.id
-    ORDER BY b.borrow_date DESC
-  `);
+    WHERE 1=1
+  `;
+  const params = [];
+  if (fromDate) {
+    query += ` AND b.borrow_date >= ?`;
+    params.push(fromDate);
+  }
+  if (toDate) {
+    query += ` AND b.borrow_date <= ?`;
+    params.push(toDate);
+  }
+  query += ` ORDER BY b.borrow_date DESC`;
+
+  const [rows] = await pool.query(query, params);
   return rows;
 };
 
+// Lấy chi tiết phiếu mượn (reader hoặc librarian)
 const getBorrowById = async (id) => {
   const [rows] = await pool.query(
-    `SELECT b.id, u.name as user_name, b.borrow_date, b.due_date, b.return_date
-       FROM borrows b
-       JOIN users u ON b.user_id = u.id
-       WHERE b.id = ?`,
+    `
+    SELECT bd.id as borrow_detail_id, d.name as document_name, 
+           b.borrow_date, b.due_date, bd.status,
+           CASE WHEN bd.reservation_id IS NOT NULL THEN 'Mượn online' ELSE 'Mượn tại chỗ' END as borrow_type
+    FROM borrow_details bd
+    JOIN borrows b ON bd.borrow_id = b.id
+    JOIN records r ON bd.record_id = r.id
+    JOIN documents d ON r.doc_id = d.id
+    WHERE b.id = ?
+  `,
     [id]
   );
-  return rows[0] || null;
+
+  return rows;
 };
 
 // ============ UPDATE ============
-// Cập nhật thông tin phiếu mượn (ví dụ hạn trả)
-const updateBorrow = async (id, data) => {
-  const { due_date, return_date } = data;
-  await pool.query(
-    `UPDATE borrows SET due_date = ?, return_date = ? WHERE id = ?`,
-    [due_date, return_date, id]
-  );
+// Chỉ cập nhật trạng thái (không cho gia hạn)
+const updateBorrowStatus = async (id, status) => {
+  await pool.query(`UPDATE borrows SET status = ? WHERE id = ?`, [status, id]);
   return getBorrowById(id);
 };
 
-// ============ DELETE ============
-// Xoá phiếu mượn (cả chi tiết)
-const deleteBorrow = async (id) => {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+// Auto update overdue
+const autoUpdateOverdue = async () => {
+  await pool.query(`
+    UPDATE borrow_details bd
+    JOIN borrows b ON bd.borrow_id = b.id
+    SET bd.status = 'overdued'
+    WHERE bd.status = 'on_loan' AND b.due_date < CURDATE()
+  `);
+};
 
-    // Xoá chi tiết
-    await conn.query(`DELETE FROM borrow_details WHERE borrow_id = ?`, [id]);
-
-    // Xoá phiếu
-    await conn.query(`DELETE FROM borrows WHERE id = ?`, [id]);
-
-    await conn.commit();
-    return { message: `Borrow ${id} deleted` };
-  } catch (error) {
-    await conn.rollback();
-    throw error;
-  } finally {
-    conn.release();
-  }
+// ============ DELETE (close) ============
+const closeBorrow = async (id) => {
+  await pool.query(`UPDATE borrows SET status = 'closed' WHERE id = ?`, [id]);
 };
 
 module.exports = {
   createBorrow,
   getBorrows,
   getBorrowById,
-  updateBorrow,
-  deleteBorrow,
-  getBorrowedBooksByUser,
+  updateBorrowStatus,
+  autoUpdateOverdue,
+  closeBorrow,
 };

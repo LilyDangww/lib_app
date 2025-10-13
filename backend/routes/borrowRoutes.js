@@ -1,30 +1,27 @@
 const express = require("express");
 const router = express.Router();
+const authToken = require("../middleware/authToken");
 const {
   createBorrow,
-  getBorrows,
-  getBorrowById,
-  updateBorrow,
-  deleteBorrow,
-  getUserBorrows,
+  getMyBorrows,
+  getAllBorrows,
+  returnBook,
+  updateBorrowStatus,
 } = require("../controllers/borrowController");
 
-// Lấy danh sách sách đã mượn của 1 user
-router.get("/user/:id", getUserBorrows);
+// Reader tạo phiếu mượn
+router.post("/", authToken, createBorrow);
 
-// Tạo phiếu mượn
-router.post("/", createBorrow);
+// Reader xem phiếu mượn của mình (lọc ngày nếu có)
+router.get("/me", authToken, getMyBorrows);
 
-// Lấy danh sách phiếu mượn
-router.get("/", getBorrows);
+// Librarian xem tất cả phiếu mượn
+router.get("/", authToken, getAllBorrows);
 
-// Lấy chi tiết phiếu mượn
-router.get("/:id", getBorrowById);
+// Trả sách (chi tiết mượn)
+router.put("/return/:detail_id", authToken, returnBook);
 
-// Cập nhật phiếu mượn
-router.put("/:id", updateBorrow);
-
-// Xoá phiếu mượn
-router.delete("/:id", deleteBorrow);
+// Cập nhật trạng thái phiếu mượn (active/closed)
+router.put("/:id/status", authToken, updateBorrowStatus);
 
 module.exports = router;

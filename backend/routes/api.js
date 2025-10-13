@@ -8,6 +8,7 @@ const borrowRoutes = require("./borrowRoutes");
 const userRoutes = require("./userRoutes");
 const borrowDetailRoutes = require("./borrowDetailRoutes");
 const authRoutes = require("./authRoutes");
+const reservationRoutes = require("./reservationRoutes");
 
 // ========== Test route gốc ==========
 router.get("/", (req, res) => {
@@ -21,6 +22,9 @@ router.use("/borrows", borrowRoutes);
 router.use("/users", userRoutes);
 router.use("/borrow-details", borrowDetailRoutes);
 router.use("/auth", authRoutes);
+router.use("/auth", reservationRoutes);
+// router.use("/inventory", require("./inventoryRoutes"));
+
 // Sau này có thêm:
 // const userRoutes = require("./userRoutes");
 // router.use("/users", userRoutes);

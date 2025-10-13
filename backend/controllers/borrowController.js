@@ -1,97 +1,107 @@
 const Borrow = require("../models/borrowModel");
-const { get } = require("../routes/documentRoutes");
 
-const getUserBorrows = async (req, res) => {
-  try {
-    const { id } = req.params; // userId
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-
-    const result = await Borrow.getBorrowedBooksByUser(id, page, limit);
-    res.json(result);
-  } catch (error) {
-    console.error("❌ Error in getUserBorrows:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// Tạo phiếu mượn
+// ================== Tạo phiếu mượn ==================
 const createBorrow = async (req, res) => {
   try {
-    const { user_id, borrow_date, due_date, recordIds } = req.body;
-    if (!user_id || !recordIds || recordIds.length === 0) {
+    const user_id = req.user.id;
+    const { records, due_date } = req.body;
+
+    if (!records || records.length === 0) {
+      return res.status(400).json({ message: "No records provided" });
+    }
+    if (records.length > 6) {
       return res
         .status(400)
-        .json({ message: "user_id và recordIds là bắt buộc" });
+        .json({ message: "Cannot borrow more than 6 books" });
     }
-    const borrow = await Borrow.createBorrow(
-      user_id,
-      borrow_date,
-      due_date,
-      recordIds
-    );
-    res.status(201).json(borrow);
+
+    const borrowId = await Borrow.createBorrow(user_id, records, due_date);
+
+    res.status(201).json({
+      message: "Borrow created successfully",
+      borrowId,
+    });
   } catch (error) {
     console.error("❌ Error createBorrow:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Lấy danh sách phiếu mượn
-const getBorrows = async (req, res) => {
+// ================== Lấy phiếu mượn của chính user ==================
+const getMyBorrows = async (req, res) => {
   try {
-    const borrows = await Borrow.getBorrows();
-    res.json(borrows);
+    const { fromDate, toDate } = req.query;
+
+    // Lọc theo ngày tạo phiếu mượn
+    const rows = await Borrow.getBorrowsByUser(req.user.id, fromDate, toDate);
+
+    // Map hiển thị: reservation_id != null => "online", ngược lại => "at library"
+    const mapped = rows.map((r) => ({
+      ...r,
+      borrow_type: r.reservation_id ? "online" : "at_library",
+    }));
+
+    res.json(mapped);
   } catch (error) {
-    console.error("❌ Error getBorrows:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("❌ Error getMyBorrows:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Lấy chi tiết phiếu mượn
-const getBorrowById = async (req, res) => {
+// ================== Lấy tất cả phiếu mượn cho thủ thư ==================
+const getAllBorrows = async (req, res) => {
   try {
-    const { id } = req.params;
-    const borrow = await Borrow.getBorrowById(id);
-    if (!borrow || borrow.length === 0) {
-      return res.status(404).json({ message: "Borrow not found" });
+    const { fromDate, toDate } = req.query;
+    const rows = await Borrow.getAllBorrows(fromDate, toDate);
+
+    const mapped = rows.map((r) => ({
+      ...r,
+      borrow_type: r.reservation_id ? "online" : "at_library",
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error("❌ Error getAllBorrows:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================== Trả sách ==================
+const returnBook = async (req, res) => {
+  try {
+    const { detail_id } = req.params;
+
+    await Borrow.updateBorrowDetailStatus(detail_id, "returned");
+
+    res.json({ message: "Book returned successfully" });
+  } catch (error) {
+    console.error("❌ Error returnBook:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================== Cập nhật trạng thái phiếu mượn ==================
+const updateBorrowStatus = async (req, res) => {
+  try {
+    const { id } = req.params; // borrow_id
+    const { status } = req.body; // chỉ active hoặc closed
+
+    if (!["active", "closed"].includes(status)) {
+      return res.status(400).json({ message: "Invalid borrow status" });
     }
-    res.json(borrow);
-  } catch (error) {
-    console.error("❌ Error getBorrowById:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
 
-// Cập nhật phiếu mượn
-const updateBorrow = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const borrow = await Borrow.updateBorrow(id, req.body);
-    res.json(borrow);
+    await Borrow.updateBorrowStatus(id, status);
+    res.json({ message: `Borrow status updated to ${status}` });
   } catch (error) {
-    console.error("❌ Error updateBorrow:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// Xoá phiếu mượn
-const deleteBorrow = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await Borrow.deleteBorrow(id);
-    res.json(result);
-  } catch (error) {
-    console.error("❌ Error deleteBorrow:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("❌ Error updateBorrowStatus:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 
 module.exports = {
   createBorrow,
-  getBorrows,
-  getBorrowById,
-  updateBorrow,
-  deleteBorrow,
-  getUserBorrows,
+  getMyBorrows,
+  getAllBorrows,
+  returnBook,
+  updateBorrowStatus,
 };

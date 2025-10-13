@@ -29,21 +29,34 @@ const createRecord = async (
     condition_note,
   };
 };
-
-// ============ READ ============
-// Lấy tất cả bản ghi (có thể filter theo doc_id)
-const getRecords = async (doc_id = null) => {
+// Lấy tất cả bản ghi (có thể filter theo doc_id và status)
+const getRecords = async (filters = {}) => {
   let query = `
-    SELECT r.id, r.doc_id, d.name as document_name, r.barcode,
-           r.location_id, r.status, r.condition_note
+    SELECT r.id, r.barcode, 
+           d.name AS document_name, 
+           l.location AS location_name,
+           r.status, 
+           r.condition_note,
+           r.created_at, 
+           r.updated_at
     FROM records r
     JOIN documents d ON r.doc_id = d.id
+    LEFT JOIN locations l ON r.location_id = l.id
     WHERE 1=1
   `;
+
   const params = [];
-  if (doc_id) {
+
+  // Lọc theo doc_id
+  if (filters.doc_id) {
     query += " AND r.doc_id = ?";
-    params.push(doc_id);
+    params.push(filters.doc_id);
+  }
+
+  // Lọc theo status
+  if (filters.status) {
+    query += " AND r.status = ?";
+    params.push(filters.status);
   }
 
   const [rows] = await pool.query(query, params);
@@ -53,9 +66,16 @@ const getRecords = async (doc_id = null) => {
 // Lấy chi tiết một bản ghi theo id
 const getRecordById = async (id) => {
   const [rows] = await pool.query(
-    `SELECT r.*, d.name as document_name
+    `SELECT r.id, r.barcode, 
+            d.name AS document_name, 
+            l.location AS location_name,
+            r.status, 
+            r.condition_note,
+            r.created_at, 
+            r.updated_at
      FROM records r
      JOIN documents d ON r.doc_id = d.id
+     LEFT JOIN locations l ON r.location_id = l.id
      WHERE r.id = ?`,
     [id]
   );
@@ -63,15 +83,40 @@ const getRecordById = async (id) => {
 };
 
 // ============ UPDATE ============
-// Cập nhật thông tin bản ghi
+// Cập nhật thông tin bản ghi (chỉ update field có trong data)
 const updateRecord = async (id, data) => {
-  const { barcode, location_id, status, condition_note } = data;
-  await pool.query(
-    `UPDATE records
-     SET barcode = ?, location_id = ?, status = ?, condition_note = ?
-     WHERE id = ?`,
-    [barcode, location_id, status, condition_note, id]
-  );
+  const fields = [];
+  const values = [];
+
+  if (data.barcode !== undefined) {
+    fields.push("barcode = ?");
+    values.push(data.barcode);
+  }
+  if (data.location_id !== undefined) {
+    fields.push("location_id = ?");
+    values.push(data.location_id);
+  }
+  if (data.status !== undefined) {
+    fields.push("status = ?");
+    values.push(data.status);
+  }
+  if (data.condition_note !== undefined) {
+    fields.push("condition_note = ?");
+    values.push(data.condition_note);
+  }
+
+  if (fields.length === 0) {
+    throw new Error("No fields to update");
+  }
+
+  const query = `
+    UPDATE records 
+    SET ${fields.join(", ")} 
+    WHERE id = ?`;
+  values.push(id);
+
+  await pool.query(query, values);
+
   return getRecordById(id);
 };
 
