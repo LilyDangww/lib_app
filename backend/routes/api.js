@@ -22,7 +22,8 @@ router.use("/borrows", borrowRoutes);
 router.use("/users", userRoutes);
 router.use("/borrow-details", borrowDetailRoutes);
 router.use("/auth", authRoutes);
-router.use("/auth", reservationRoutes);
+router.use("/reservations", reservationRoutes);
+
 // router.use("/inventory", require("./inventoryRoutes"));
 
 // Sau này có thêm:

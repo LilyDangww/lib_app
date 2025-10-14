@@ -9,6 +9,7 @@ const {
   getReservationById,
   confirmReservation,
   cancelReservation,
+  getReservationDetails,
 } = require("../controllers/reservationController");
 
 // User tạo phiếu giữ
@@ -19,6 +20,7 @@ router.get("/", authToken, getReservations);
 
 // Xem chi tiết phiếu giữ
 router.get("/:id", authToken, getReservationById);
+router.get("/:id/details", authToken, getReservationDetails);
 
 // Thủ thư xác nhận
 router.patch(

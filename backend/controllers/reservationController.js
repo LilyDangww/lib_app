@@ -76,6 +76,17 @@ const cancelReservation = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+// controllers/reservationController.js
+const getReservationDetails = async (req, res) => {
+  try {
+    const { id } = req.params; // reservation_id
+    const status = req.query.status || null;
+    const details = await Reservation.getReservationDetailsByTicket(id, status);
+    res.json(details);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 module.exports = {
   createReservation,
@@ -83,4 +94,5 @@ module.exports = {
   getReservationById,
   confirmReservation,
   cancelReservation,
+  getReservationDetails,
 };
