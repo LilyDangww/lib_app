@@ -77,16 +77,31 @@ const getUserById = async (id) => {
   );
   return rows[0];
 };
-
-// Cập nhật user
+// Cập nhật user (chỉ update các trường có trong body)
 const updateUser = async (id, user) => {
-  const { username, gender, email, dob, phone } = user;
+  const fields = [];
+  const values = [];
+
+  // Duyệt qua từng key trong object user
+  for (let [key, value] of Object.entries(user)) {
+    // Chỉ thêm nếu giá trị không undefined
+    if (value !== undefined) {
+      fields.push(`${key} = ?`);
+      values.push(value);
+    }
+  }
+
+  if (fields.length === 0) {
+    throw new Error("Không có dữ liệu để cập nhật");
+  }
+
+  values.push(id); // ID để đưa vào WHERE
+
   const [result] = await pool.query(
-    `UPDATE users 
-     SET username = ?, gender = ?, email = ?, dob = ?, phone = ?
-     WHERE id = ?`,
-    [username, gender, email, dob, phone, id]
+    `UPDATE users SET ${fields.join(", ")} WHERE id = ?`,
+    values
   );
+
   return result.affectedRows;
 };
 
