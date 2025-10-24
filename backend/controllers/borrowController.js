@@ -52,7 +52,7 @@ const getMyBorrows = async (req, res) => {
 const getAllBorrows = async (req, res) => {
   try {
     const { fromDate, toDate } = req.query;
-    const rows = await Borrow.getAllBorrows(fromDate, toDate);
+    const rows = await Borrow.getBorrows(fromDate, toDate);
 
     const mapped = rows.map((r) => ({
       ...r,

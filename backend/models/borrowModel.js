@@ -103,7 +103,7 @@ const createBorrow = async (user_id, borrow_date, due_date, recordIds) => {
 const getBorrows = async (fromDate, toDate) => {
   let query = `
     SELECT b.id, u.username as user_name, b.borrow_date, b.due_date, b.status
-    FROM borrows b
+    FROM borrow_tickets b
     JOIN users u ON b.user_id = u.id
     WHERE 1=1
   `;
@@ -130,7 +130,7 @@ const getBorrowById = async (id) => {
            b.borrow_date, b.due_date, bd.status,
            CASE WHEN bd.reservation_id IS NOT NULL THEN 'Mượn online' ELSE 'Mượn tại chỗ' END as borrow_type
     FROM borrow_details bd
-    JOIN borrows b ON bd.borrow_id = b.id
+    JOIN borrow_tickets b ON bd.borrow_id = b.id
     JOIN records r ON bd.record_id = r.id
     JOIN documents d ON r.doc_id = d.id
     WHERE b.id = ?
@@ -144,7 +144,10 @@ const getBorrowById = async (id) => {
 // ============ UPDATE ============
 // Chỉ cập nhật trạng thái (không cho gia hạn)
 const updateBorrowStatus = async (id, status) => {
-  await pool.query(`UPDATE borrows SET status = ? WHERE id = ?`, [status, id]);
+  await pool.query(`UPDATE borrow_tickets SET status = ? WHERE id = ?`, [
+    status,
+    id,
+  ]);
   return getBorrowById(id);
 };
 
@@ -152,7 +155,7 @@ const updateBorrowStatus = async (id, status) => {
 const autoUpdateOverdue = async () => {
   await pool.query(`
     UPDATE borrow_details bd
-    JOIN borrows b ON bd.borrow_id = b.id
+    JOIN borrow_tickets b ON bd.borrow_id = b.id
     SET bd.status = 'overdued'
     WHERE bd.status = 'on_loan' AND b.due_date < CURDATE()
   `);
@@ -160,7 +163,9 @@ const autoUpdateOverdue = async () => {
 
 // ============ DELETE (close) ============
 const closeBorrow = async (id) => {
-  await pool.query(`UPDATE borrows SET status = 'closed' WHERE id = ?`, [id]);
+  await pool.query(`UPDATE borrow_tickets SET status = 'closed' WHERE id = ?`, [
+    id,
+  ]);
 };
 
 module.exports = {

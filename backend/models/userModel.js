@@ -50,14 +50,20 @@ const registerUser = async (username, gender, email, dob, phone, password) => {
 
   return await createUser(username, hashedPassword, gender, email, dob, phone);
 };
-
 // ====== 4. Lấy user theo email ======
 const getUserByEmail = async (email) => {
-  const [rows] = await pool.query(`SELECT * FROM users WHERE email = ?`, [
-    email,
-  ]);
+  const [rows] = await pool.query(
+    `
+    SELECT u.*, ur.role_id
+    FROM users u
+    LEFT JOIN user_roles ur ON u.id = ur.user_id
+    WHERE u.email = ?
+    `,
+    [email]
+  );
   return rows[0];
 };
+
 
 // Lấy tất cả users
 const getAllUsers = async () => {

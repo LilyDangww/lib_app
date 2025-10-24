@@ -1,5 +1,4 @@
 //console.log("authToken");
-
 const jwt = require("jsonwebtoken");
 
 // Middleware xác thực token

@@ -70,19 +70,55 @@
  * @swagger
  * /users:
  *   post:
- *     summary: Tạo người dùng mới do thủ thư thêm
+ *     summary: Thủ thư thêm bạn đọc mới
+ *     description: Tạo tài khoản bạn đọc mới. Chỉ cần nhập tên và số điện thoại (bắt buộc), các trường khác có thể để trống.
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/User'
+ *             type: object
+ *             required:
+ *               - username
+ *               - phone
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: "Đặng Phương Huệ"
+ *                 description: Tên bạn đọc (bắt buộc)
+ *               phone:
+ *                 type: string
+ *                 example: "0987654321"
+ *                 description: Số điện thoại bạn đọc (bắt buộc)
+ *               email:
+ *                 type: string
+ *                 example: "hue123@example.com"
+ *                 description: Email (tùy chọn)
+ *               gender:
+ *                 type: string
+ *                 enum: [male, female, other]
+ *                 example: "female"
+ *                 description: Giới tính (tùy chọn)
+ *               dob:
+ *                 type: string
+ *                 format: date
+ *                 example: "2004-03-14"
+ *                 description: Ngày sinh (tùy chọn, định dạng YYYY-MM-DD)
  *     responses:
  *       201:
- *         description: Tạo user thành công
+ *         description: Tạo bạn đọc thành công
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "User created successfully"
+ *               user_id: 12
  *       400:
- *         description: Dữ liệu không hợp lệ
+ *         description: Thiếu dữ liệu hoặc số điện thoại đã tồn tại
+ *       403:
+ *         description: Không có quyền (chỉ thủ thư được phép)
  */
 
 /**
@@ -196,6 +232,79 @@
 
 /**
  * @swagger
+ * /users/self:
+ *   put:
+ *     summary: Người dùng tự chỉnh sửa thông tin của chính mình
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *                 maxLength: 15
+ *                 description: Số điện thoại mới của người dùng
+ *                 example: "0987654321"
+ *     responses:
+ *       200:
+ *         description: Cập nhật thông tin thành công
+ *       400:
+ *         description: Dữ liệu không hợp lệ
+ *       404:
+ *         description: Không tìm thấy người dùng
+ *       500:
+ *         description: Lỗi máy chủ
+ */
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   put:
+ *     summary: Thủ thư chỉnh sửa thông tin người dùng
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID của người dùng cần chỉnh sửa
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *                 maxLength: 15
+ *                 description: Số điện thoại mới của người dùng
+ *                 example: "0987654321"
+ *               is_active:
+ *                 type: boolean
+ *                 description: Trạng thái hoạt động của người dùng
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Cập nhật thông tin thành công
+ *       400:
+ *         description: Dữ liệu không hợp lệ
+ *       404:
+ *         description: Không tìm thấy người dùng
+ *       500:
+ *         description: Lỗi máy chủ
+ */
+
+/**
+ * @swagger
  * /users/{id}:
  *   delete:
  *     summary: Xóa (soft delete) người dùng theo ID
@@ -216,6 +325,8 @@
 
 const express = require("express");
 const router = express.Router();
+const authToken = require("../middleware/authToken");
+const permission = require("../helpers/permission");
 
 const {
   createUserByLibrarian,
@@ -223,17 +334,35 @@ const {
   getUserByEmail,
   getUsers,
   getUser,
-  editUser,
+  editUserSelf,
+  editUserByLibrarian,
   removeUser,
 } = require("../controllers/userController");
 
 // CRUD
-router.post("/", createUserByLibrarian); // Thêm user do thủ thư tạo (mật khẩu mặc định)
-router.post("/register", registerUser); // Đăng ký user (reader tự đăng ký)
-router.get("/email/:email", getUserByEmail); // Lấy user theo email
-router.get("/", getUsers); // Lấy danh sách user
-router.get("/:id", getUser); // Lấy 1 user theo id
-router.put("/:id", editUser); // Cập nhật user
-router.delete("/:id", removeUser); // Xóa user (soft delete)
+
+// Thêm user do thủ thư tạo (mật khẩu mặc định)
+router.post("/", permission.isLibrarian, createUserByLibrarian);
+
+// Đăng ký user (reader tự đăng ký)
+router.post("/register", registerUser);
+
+// Lấy user theo email
+router.get("/email/:email", permission.isLibrarian, getUserByEmail);
+
+// Lấy danh sách user
+router.get("/", permission.isLibrarian, getUsers);
+
+// Lấy 1 user theo id
+router.get("/:id", permission.isLibrarian, getUser);
+
+// Người dùng tự chỉnh sửa thông tin của chính mình
+router.put("/self", authToken, editUserSelf);
+
+// Thủ thư chỉnh sửa thông tin người dùng (giới hạn quyền chỉnh sửa)
+router.put("/:id", permission.isLibrarian, editUserByLibrarian);
+
+// Xóa user (soft delete)
+router.delete("/:id", permission.isLibrarian, removeUser);
 
 module.exports = router;

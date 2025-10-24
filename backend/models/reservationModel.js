@@ -1,9 +1,9 @@
 const pool = require("../config/db");
+const { get } = require("../routes/recordRoutes");
 
-// Tạo phiếu giữ và chi tiết cùng lúc
 const createReservationWithDetails = async (
   user_id,
-  hold_type = "hard", // gán mặc định hard nếu không truyền
+  hold_type = "hard",
   record_ids,
   note = null
 ) => {
@@ -18,26 +18,27 @@ const createReservationWithDetails = async (
   try {
     await conn.beginTransaction();
 
-    // Kiểm tra số lượng sách user đang giữ (chưa completed/cancelled)
+    // ✅ Kiểm tra tổng số sách user đang giữ hoặc đang chờ duyệt
     const [activeHold] = await conn.query(
       `
       SELECT COUNT(rd.id) AS cnt
       FROM reservation_tickets rt
       JOIN reservation_details rd ON rt.id = rd.reservation_id
       WHERE rt.user_id = ?
-        AND rt.status IN ('processing','on_hold')
-        AND rd.status IN ('pending','on_hold')
+        AND rt.status NOT IN ('closed', 'cancelled')
+        AND rd.status IN ('pending', 'on_hold')
       `,
       [user_id]
     );
 
-    if (activeHold[0].cnt + record_ids.length > 2) {
+    const totalHolding = activeHold[0].cnt + record_ids.length;
+    if (totalHolding > 2) {
       throw new Error(
-        "Một người dùng chỉ được phép giữ tối đa 2 bản ghi tại một thời điểm"
+        `Người dùng này đã giữ ${activeHold[0].cnt} bản ghi, chỉ có thể giữ tối đa 2 bản ghi cùng lúc.`
       );
     }
 
-    // Tạo phiếu giữ
+    // ✅ Tạo phiếu giữ
     const [ticketResult] = await conn.query(
       `INSERT INTO reservation_tickets (user_id, hold_type, status, request_date, note)
        VALUES (?, ?, 'processing', NOW(), ?)`,
@@ -46,9 +47,8 @@ const createReservationWithDetails = async (
 
     const reservationId = ticketResult.insertId;
 
-    // Thêm chi tiết giữ cho từng record
+    // ✅ Thêm chi tiết giữ cho từng record
     for (let record_id of record_ids) {
-      // Kiểm tra record phải available
       const [[record]] = await conn.query(
         `SELECT status FROM records WHERE id = ?`,
         [record_id]
@@ -59,13 +59,12 @@ const createReservationWithDetails = async (
         throw new Error(`Record ${record_id} không khả dụng`);
       }
 
-      // Insert chi tiết giữ
       await conn.query(
         `INSERT INTO reservation_details (reservation_id, record_id, status, hold_start_at, default_expire_at)
          VALUES (?, ?, 'pending', NULL, NULL)`,
         [reservationId, record_id]
       );
-      // Cập nhật trạng thái record -> reserved_pending
+
       await conn.query(
         `UPDATE records SET status = 'reserved_pending' WHERE id = ?`,
         [record_id]
@@ -82,65 +81,101 @@ const createReservationWithDetails = async (
   }
 };
 
-// Lấy phiếu giữ kèm chi tiết giữ (có lọc trạng thái + sắp xếp ngày)
-const getReservationWithDetails = async (id, status = null, sort = "DESC") => {
-  const [ticketRows] = await pool.query(
-    `SELECT r.id AS reservation_id, r.user_id, u.username, r.hold_type, 
-            r.status AS ticket_status, r.request_date, r.note
-     FROM reservation_tickets r 
-     JOIN users u ON r.user_id = u.id 
-     WHERE r.id = ?`,
+const getReservationWithDetailsById = async (id) => {
+  const [rows] = await pool.query(
+    `SELECT 
+        rt.id AS reservation_id,
+        rt.user_id, 
+        u.username AS user_name,
+        rt.hold_type,
+        rt.status AS ticket_status,
+        rt.request_date,
+        rt.note, 
+        rd.id AS detail_id,
+        rd.record_id,
+        r.barcode,
+        d.name AS book_title,
+        rd.status AS detail_status,
+        rd.hold_start_at,
+        rd.default_expire_at
+     FROM reservation_tickets rt
+     JOIN users u ON rt.user_id = u.id  
+      JOIN reservation_details rd ON rt.id = rd.reservation_id
+      JOIN records r ON rd.record_id = r.id
+      JOIN documents d ON r.doc_id = d.id
+     WHERE rt.id = ?`,
     [id]
   );
+  return rows;
+};
 
-  if (ticketRows.length === 0) return null;
-
-  const ticket = ticketRows[0];
-
-  // Chi tiết giữ
-  let query = `
-    SELECT 
-      rd.id AS detail_id,
-      rd.record_id,
-      r.barcode,
-      d.name AS book_title,
-      a.name AS author_name,
-      rd.status AS detail_status,
-      rd.hold_start_at,
-      rd.default_expire_at
+const getReservationDetailBasicById = async (detail_id) => {
+  const [rows] = await pool.query(
+    `
+    SELECT rd.id AS detail_id, rd.reservation_id, rd.status AS detail_status, rt.user_id
     FROM reservation_details rd
-    JOIN records r ON rd.record_id = r.id
-    JOIN documents d ON r.doc_id = d.id
-    LEFT JOIN doc_author da ON d.id = da.doc_id
-    LEFT JOIN authors a ON da.author_id = a.id
-    WHERE rd.reservation_id = ?
-  `;
-  const params = [id];
-
-  if (status) {
-    query += " AND rd.status = ?";
-    params.push(status);
-  }
-
-  // sort: DESC (mặc định) hoặc ASC
-  query += ` ORDER BY rd.hold_start_at ${sort === "ASC" ? "ASC" : "DESC"}`;
-
-  const [details] = await pool.query(query, params);
-  ticket.details = details;
-
-  return ticket;
-};
-
-const confirmReservationDetails = async (reservation_id) => {
-  await pool.query(
-    `UPDATE reservation_details
-     SET status = 'on_hold',
-         hold_start_at = NOW(),
-         default_expire_at = DATE_ADD(NOW(), INTERVAL 2 DAY)
-     WHERE reservation_id = ? AND status = 'pending'`,
-    [reservation_id]
+    JOIN reservation_tickets rt ON rd.reservation_id = rt.id
+    WHERE rd.id = ?
+    `,
+    [detail_id]
   );
+  return rows[0] || null;
 };
+
+const getReservationById = async (id) => {
+  const [rows] = await pool.query(
+    `SELECT 
+        rt.id AS reservation_id,
+        rt.user_id,
+        u.username AS user_name,
+        rt.hold_type,
+        rt.status AS ticket_status,
+        rt.request_date,
+        rt.note
+     FROM reservation_tickets rt
+     JOIN users u ON rt.user_id = u.id
+     WHERE rt.id = ?`,
+    [id]
+  );
+  return rows[0] || null;
+};
+
+// Xác nhận chi tiết giữ (thủ thư)
+const confirmReservationDetails = async (reservation_id) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Cập nhật chi tiết giữ + record
+    await conn.query(
+      `UPDATE reservation_details rd
+       JOIN records r ON rd.record_id = r.id
+       SET rd.status = 'on_hold',
+           rd.hold_start_at = NOW(),
+           rd.default_expire_at = DATE_ADD(NOW(), INTERVAL 2 DAY),
+           r.status = 'on_hold'
+       WHERE rd.reservation_id = ? AND rd.status = 'pending'`,
+      [reservation_id]
+    );
+
+    // Cập nhật trạng thái phiếu giữ
+    await conn.query(
+      `UPDATE reservation_tickets
+       SET status = 'active'
+       WHERE id = ?`,
+      [reservation_id]
+    );
+
+    await conn.commit();
+    return true;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
 const updateReservationDetailById = async (detail_id, newStatus) => {
   const conn = await pool.getConnection();
   try {
@@ -161,26 +196,7 @@ const updateReservationDetailById = async (detail_id, newStatus) => {
     }
 
     // Cập nhật trạng thái chi tiết + record theo newStatus
-    if (newStatus === "on_hold") {
-      await conn.query(
-        `UPDATE reservation_details rd
-         JOIN records r ON rd.record_id = r.id
-         SET rd.status = 'on_hold',
-             rd.hold_start_at = NOW(),
-             rd.default_expire_at = DATE_ADD(NOW(), INTERVAL 2 DAY),
-             r.status = 'on_hold'
-         WHERE rd.id = ?`,
-        [detail_id]
-      );
-
-      // Ticket sang active
-      await conn.query(
-        `UPDATE reservation_tickets 
-         SET status = 'active' 
-         WHERE id = ?`,
-        [detail.reservation_id]
-      );
-    } else if (newStatus === "picked_up") {
+    if (newStatus === "picked_up") {
       await conn.query(
         `UPDATE reservation_details rd
          JOIN records r ON rd.record_id = r.id
@@ -234,28 +250,17 @@ const deleteReservation = async (id) => {
   );
   return result.affectedRows > 0;
 };
-// Lấy danh sách phiếu giữ của 1 user kèm chi tiết (lọc trạng thái + khoảng thời gian)
-const getUserReservationsWithDetails = async (
-  user_id,
-  status = null,
-  startDate = null,
-  endDate = null,
-  sort = "DESC"
-) => {
+
+// 🧍‍♀️ Lấy danh sách tất cả sách trong chi tiết giữ của user (lọc theo trạng thái)
+const getUserHoldDetails = async (user_id, status = null) => {
   let query = `
     SELECT 
-      rt.id AS reservation_id,
-      rt.user_id,
-      rt.hold_type,
-      rt.status AS ticket_status,
-      rt.request_date,
-      rt.note,
-
       rd.id AS detail_id,
+      rt.id AS reservation_id,
+      rt.request_date,
       rd.status AS detail_status,
       rd.hold_start_at,
       rd.default_expire_at,
-
       r.barcode,
       d.name AS book_title
     FROM reservation_tickets rt
@@ -271,21 +276,18 @@ const getUserReservationsWithDetails = async (
     params.push(status);
   }
 
-  if (startDate && endDate) {
-    query += " AND DATE(rt.request_date) BETWEEN ? AND ?";
-    params.push(startDate, endDate);
-  }
-
-  query += ` ORDER BY rt.request_date ${sort === "ASC" ? "ASC" : "DESC"}`;
+  query += ` ORDER BY rt.request_date DESC`; // mới nhất lên đầu
 
   const [rows] = await pool.query(query, params);
   return rows;
 };
-// Lấy danh sách phiếu giữ cho thủ thư (lọc trạng thái + khoảng thời gian)
-const getAllReservationsWithDetailsForLibrarian = async (
+// 📚 Lấy danh sách phiếu giữ (cho thủ thư) - lọc linh hoạt: user, trạng thái, ngày
+const getReservationsWithDetails = async (
+  user_id = null, // nếu có -> xem của 1 bạn đọc cụ thể
   status = null,
   startDate = null,
   endDate = null,
+  userKeyword = null, // tìm theo tên, sđt, id
   sort = "DESC"
 ) => {
   let query = `
@@ -293,6 +295,7 @@ const getAllReservationsWithDetailsForLibrarian = async (
       rt.id AS reservation_id,
       rt.user_id,
       u.username AS user_name,
+      u.phone AS user_phone,
       rt.hold_type,
       rt.status AS ticket_status,
       rt.request_date,
@@ -312,30 +315,118 @@ const getAllReservationsWithDetailsForLibrarian = async (
     JOIN documents d ON r.doc_id = d.id
     WHERE 1=1
   `;
+
   const params = [];
 
+  // 🔹 Nếu truyền user_id (xem lịch sử của một bạn đọc cụ thể)
+  if (user_id) {
+    query += " AND rt.user_id = ?";
+    params.push(user_id);
+  }
+
+  // 🔹 Lọc theo từ khóa người dùng (tên / sđt / id)
+  if (userKeyword) {
+    if (!isNaN(userKeyword)) {
+      query += " AND (u.phone LIKE ? OR u.id = ?)";
+      params.push(`%${userKeyword}%`, userKeyword);
+    } else {
+      query += " AND u.username LIKE ?";
+      params.push(`%${userKeyword}%`);
+    }
+  }
+
+  // 🔹 Lọc theo trạng thái chi tiết giữ
   if (status) {
     query += " AND rd.status = ?";
     params.push(status);
   }
 
-  if (startDate && endDate) {
-    query += " AND DATE(rt.request_date) BETWEEN ? AND ?";
-    params.push(startDate, endDate);
+  // 🔹 Lọc theo khoảng thời gian (chuẩn, ngắn gọn)
+  if (startDate || endDate) {
+    const s = startDate ? `${startDate} 00:00:00` : "1970-01-01 00:00:00";
+    const e = endDate ? `${endDate} 23:59:59` : "2999-12-31 23:59:59";
+    query += " AND rt.request_date BETWEEN ? AND ?";
+    params.push(s, e);
   }
 
+  // 🔹 Sắp xếp
   query += ` ORDER BY rt.request_date ${sort === "ASC" ? "ASC" : "DESC"}`;
 
   const [rows] = await pool.query(query, params);
   return rows;
 };
 
+// Tự động hết hạn phiếu giữ (quá 2 ngày kể từ request_date)
+const expireOverdueReservations = async () => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1️⃣ Lấy danh sách phiếu còn đang active hoặc processing đã quá 2 ngày
+    const [overdueTickets] = await conn.query(`
+      SELECT id 
+      FROM reservation_tickets
+      WHERE status IN ('processing', 'active')
+      AND request_date < DATE_SUB(NOW(), INTERVAL 2 DAY)
+    `);
+
+    if (overdueTickets.length === 0) {
+      await conn.commit();
+      return { message: "Không có phiếu giữ nào quá hạn." };
+    }
+
+    // 2️⃣ Cập nhật từng phiếu
+    for (const ticket of overdueTickets) {
+      // Cập nhật chi tiết và record
+      await conn.query(
+        `
+        UPDATE reservation_details rd
+        JOIN records r ON rd.record_id = r.id
+        SET rd.status = 'expired',
+            r.status = 'available'
+        WHERE rd.reservation_id = ?
+          AND rd.status IN ('pending', 'on_hold')
+      `,
+        [ticket.id]
+      );
+
+      // Cập nhật phiếu sang closed (nếu không còn chi tiết giữ)
+      await conn.query(
+        `
+        UPDATE reservation_tickets rt
+        SET rt.status = 'closed'
+        WHERE rt.id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM reservation_details rd
+          WHERE rd.reservation_id = rt.id
+          AND rd.status IN ('pending','on_hold')
+        )
+      `,
+        [ticket.id]
+      );
+    }
+
+    await conn.commit();
+    return {
+      message: `Đã hết hạn ${overdueTickets.length} phiếu giữ quá hạn.`,
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   createReservationWithDetails,
+  getReservationById,
+  getReservationWithDetailsById,
+  getReservationDetailBasicById,
   confirmReservationDetails,
   updateReservationDetailById,
   deleteReservation,
-  getReservationWithDetails,
-  getUserReservationsWithDetails,
-  getAllReservationsWithDetailsForLibrarian,
+  getUserHoldDetails,
+  getReservationsWithDetails,
+  expireOverdueReservations,
 };

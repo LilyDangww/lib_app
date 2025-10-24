@@ -4,6 +4,18 @@ const createUserByLibrarian = async (req, res) => {
   try {
     const { username, gender, email, dob, phone } = req.body;
 
+    if (!username.trim()) {
+      return res.status(400).json({ message: "Tên không được để trống" });
+    }
+    if (!phone.trim()) {
+      return res
+        .status(400)
+        .json({ message: "Số điện thoại không được để trống" });
+    }
+    if (!/^\d{9,11}$/.test(phone)) {
+      return res.status(400).json({ message: "Số điện thoại không hợp lệ" });
+    }
+
     await User.createUserByLibrarian(username, gender, email, dob, phone);
 
     res.status(201).json({
@@ -78,12 +90,42 @@ const getUser = async (req, res) => {
   }
 };
 
-// Cập nhật user
-const editUser = async (req, res) => {
+// Người dùng tự chỉnh sửa thông tin của chính mình
+const editUserSelf = async (req, res) => {
   try {
-    const affected = await User.updateUser(req.params.id, req.body);
+    const userId = req.user.id; // Lấy ID từ token
+    const affected = await User.updateUser(userId, req.body);
     if (!affected) return res.status(404).json({ message: "User not found" });
-    res.json({ message: "User updated" });
+    res.json({ message: "User updated successfully" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error updating user", error: error.message });
+  }
+};
+
+// Thủ thư chỉnh sửa thông tin người dùng (chỉ được phép chỉnh sửa số điện thoại và trạng thái hoạt động)
+const editUserByLibrarian = async (req, res) => {
+  try {
+    const { phone, is_active } = req.body;
+
+    // Chỉ cho phép chỉnh sửa các trường được phép
+    const updateData = {};
+    if (phone !== undefined) updateData.phone = phone;
+    if (is_active !== undefined) updateData.is_active = is_active;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update" });
+    }
+
+    const affected = await User.updateUser(req.params.id, updateData);
+    if (!affected) return res.status(404).json({ message: "User not found" });
+
+    res.json({
+      message: "User updated by librarian",
+      updatedFields: updateData,
+    });
   } catch (error) {
     console.error(error);
     res
@@ -112,6 +154,7 @@ module.exports = {
   getUserByEmail,
   getUsers,
   getUser,
-  editUser,
+  editUserSelf,
+  editUserByLibrarian,
   removeUser,
 };

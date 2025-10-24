@@ -7,4 +7,11 @@ const isLibrarian = (req, res, next) => {
   next();
 };
 
-module.exports = { isLibrarian };
+const isReader = (req, res, next) => {
+  if (req.user.role_id !== 3) {
+    // ví dụ role 3 = reader
+    return res.status(403).json({ message: "Access denied" });
+  }
+  next();
+};
+module.exports = { isLibrarian, isReader };
