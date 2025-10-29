@@ -1,0 +1,9 @@
+packages:
+  - "backend"
+  - "frontend"
+  # Nếu bạn có thêm thư mục khác, thêm ở đây
+
+# Cấu hình thêm để pnpm không tự ghi đè lock file trong frontend
+neverBuiltDependencies:
+  - "*"
+link-workspace-packages: false
