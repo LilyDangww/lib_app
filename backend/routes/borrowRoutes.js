@@ -47,7 +47,14 @@
  * @swagger
  * /borrows:
  *   post:
- *     summary: Reader tạo phiếu mượn mới
+ *     summary: Tạo phiếu mượn mới (gồm cả sách mượn tại chỗ và sách từ phiếu giữ)
+ *     description: |
+ *       API cho thủ thư hoặc hệ thống tạo phiếu mượn mới.
+ *       Ngày mượn (**borrow_date**) tự động lấy thời gian hiện tại, hạn trả (**due_date**) tự động tính = ngày mượn + 35 ngày.
+ *
+ *       Trong danh sách sách (`records`):
+ *       - Nếu là **mượn tại chỗ** → truyền `record_id` (ID bản ghi sách khả dụng).
+ *       - Nếu là **mượn từ phiếu giữ** → truyền `reservation_detail_id` (ID chi tiết giữ ở trạng thái `on_hold`).
  *     tags: [Borrows]
  *     security:
  *       - bearerAuth: []
@@ -57,27 +64,59 @@
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - user_id
+ *               - records
  *             properties:
- *               reservation_id:
+ *               user_id:
  *                 type: integer
- *                 example: 22
- *               note:
- *                 type: string
- *                 example: "Mượn sách từ phiếu giữ số 22"
+ *                 description: ID của bạn đọc mượn sách
+ *                 example: 12
+ *               records:
+ *                 type: array
+ *                 description: Danh sách các sách được mượn (tại chỗ hoặc từ phiếu giữ)
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     record_id:
+ *                       type: integer
+ *                       description: ID bản ghi sách (nếu mượn tại chỗ)
+ *                       example: 21
+ *                     reservation_detail_id:
+ *                       type: integer
+ *                       description: ID chi tiết giữ (nếu mượn từ phiếu giữ)
+ *                       example: 19
  *           example:
- *             reservation_id: 22
- *             note: "Mượn 2 quyển đã đặt giữ"
+ *             user_id: 12
+ *             records:
+ *               - record_id: 21
+ *               - reservation_detail_id: 16
  *     responses:
  *       201:
- *         description: Tạo phiếu mượn thành công
+ *         description: Phiếu mượn được tạo thành công
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Borrow'
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Borrow created successfully"
+ *                 borrowId:
+ *                   type: integer
+ *                   example: 45
+ *                 borrow_date:
+ *                   type: string
+ *                   example: "2025-10-24"
+ *                 due_date:
+ *                   type: string
+ *                   example: "2025-11-28"
  *       400:
- *         description: Dữ liệu không hợp lệ
+ *         description: Thiếu dữ liệu hoặc sách không khả dụng
  *       401:
- *         description: Chưa đăng nhập
+ *         description: Người dùng chưa đăng nhập
+ *       500:
+ *         description: Lỗi hệ thống
  */
 
 /**
@@ -90,14 +129,14 @@
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: from
+ *         name: fromDate
  *         schema:
  *           type: string
  *           format: date
  *           example: "2025-10-01"
  *         description: Ngày bắt đầu lọc
  *       - in: query
- *         name: to
+ *         name: toDate
  *         schema:
  *           type: string
  *           format: date
@@ -120,11 +159,25 @@
  * @swagger
  * /borrows:
  *   get:
- *     summary: Librarian xem tất cả phiếu mượn
+ *     summary: Librarian xem tất cả phiếu mượn (lọc theo ngày)
  *     tags: [Borrows]
  *     security:
  *       - bearerAuth: []
  *     parameters:
+ *       - in: query
+ *         name: fromDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *           example: "2025-10-01"
+ *         description: Ngày bắt đầu lọc
+ *       - in: query
+ *         name: toDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *           example: "2025-10-31"
+ *         description: Ngày kết thúc lọc
  *       - in: query
  *         name: status
  *         schema:
@@ -152,47 +205,9 @@
 
 /**
  * @swagger
- * /borrows/return/{detail_id}:
- *   put:
- *     summary: Trả sách (chi tiết mượn)
- *     tags: [Borrows]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: detail_id
- *         required: true
- *         schema:
- *           type: integer
- *           example: 33
- *         description: ID chi tiết mượn
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               condition:
- *                 type: string
- *                 example: "good"
- *               note:
- *                 type: string
- *                 example: "Trả sách nguyên vẹn"
- *     responses:
- *       200:
- *         description: Trả sách thành công
- *       400:
- *         description: Dữ liệu không hợp lệ
- *       404:
- *         description: Không tìm thấy bản ghi mượn
- */
-
-/**
- * @swagger
  * /borrows/{id}/status:
  *   put:
- *     summary: Cập nhật trạng thái phiếu mượn (active / closed / overdue)
+ *     summary: Cập nhật trạng thái phiếu mượn (active / closed)
  *     tags: [Borrows]
  *     security:
  *       - bearerAuth: []
@@ -212,7 +227,7 @@
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [active, closed, overdue]
+ *                 enum: [active, closed]
  *                 example: "closed"
  *     responses:
  *       200:
@@ -221,8 +236,63 @@
  *         description: Không tìm thấy phiếu mượn
  */
 
+/**
+ * @swagger
+ * /borrows/details/{detailId}/return:
+ *   patch:
+ *     summary: Trả sách (chi tiết mượn) - phiên bản PATCH
+ *     tags: [Borrows]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: detailId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 33
+ *         description: ID chi tiết mượn
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               condition:
+ *                 type: string
+ *                 example: "good"
+ *               note:
+ *                 type: string
+ *                 example: "Trả sách nguyên vẹn"
+ *     responses:
+ *       200:
+ *         description: Trả sách thành công
+ *       400:
+ *         description: Dữ liệu không hợp lệ hoặc trạng thái không cho phép trả
+ *       404:
+ *         description: Không tìm thấy chi tiết mượn
+ */
+
+/**
+ * @swagger
+ * /borrows/cron/overdue:
+ *   post:
+ *     summary: Tự động cập nhật quá hạn các chi tiết mượn (set 'expired' nếu quá hạn)
+ *     description: Cập nhật trạng thái chi tiết mượn thành 'expired' nếu quá hạn. Phiếu mượn vẫn giữ nguyên (active) nếu còn chi tiết 'on_loan' hoặc 'expired'.
+ *     tags: [Borrows]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Đã cập nhật quá hạn cho các chi tiết mượn
+ *       500:
+ *         description: Lỗi hệ thống
+ */
+
 const express = require("express");
 const router = express.Router();
+const permission = require("../helpers/permission");
 const authToken = require("../middleware/authToken");
 const {
   createBorrow,
@@ -230,21 +300,25 @@ const {
   getAllBorrows,
   returnBook,
   updateBorrowStatus,
+  autoUpdateOverdue,
 } = require("../controllers/borrowController");
 
-// Reader tạo phiếu mượn
-router.post("/", authToken, createBorrow);
+// Reader/Librarian: tạo phiếu mượn nên để Librarian thao tác (controller cũng nhận user_id mục tiêu)
+router.post("/", permission.isLibrarian, createBorrow);
 
 // Reader xem phiếu mượn của mình (lọc ngày nếu có)
 router.get("/me", authToken, getMyBorrows);
 
 // Librarian xem tất cả phiếu mượn
-router.get("/", authToken, getAllBorrows);
+router.get("/", permission.isLibrarian, getAllBorrows);
 
-// Trả sách (chi tiết mượn)
-router.put("/return/:detail_id", authToken, returnBook);
+// Người dùng đã đăng nhập (reader hoặc librarian) trả sách
+router.patch("/details/:detailId/return", authToken, returnBook);
 
-// Cập nhật trạng thái phiếu mượn (active/closed)
-router.put("/:id/status", authToken, updateBorrowStatus);
+// Cập nhật trạng thái phiếu mượn (active/closed) - chỉ Librarian
+router.put("/:id/status", permission.isLibrarian, updateBorrowStatus);
+
+// Thủ thư chạy cron quá hạn
+router.post("/cron/overdue", permission.isLibrarian, autoUpdateOverdue);
 
 module.exports = router;

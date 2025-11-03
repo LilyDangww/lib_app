@@ -131,16 +131,47 @@ const updateDocument = async (id, docData) => {
   return result.affectedRows > 0;
 };
 
-// Xóa sách (chỉ đánh dấu là không hoạt động)
+// ❌ Không xóa vật lý — chỉ đánh dấu is_active = 0 nếu không còn record sử dụng
 const deleteDocument = async (id) => {
-  const [result] = await pool.query(
-    `UPDATE documents 
-     SET is_active = 0 
-     WHERE id = ?`,
-    [id]
-  );
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  return result.affectedRows > 0;
+    // 1️⃣ Kiểm tra xem document này còn record nào hoạt động không
+    const [records] = await conn.query(
+      `
+      SELECT COUNT(*) AS active_count
+      FROM records
+      WHERE doc_id = ? 
+        AND status NOT IN ('lost', 'damaged', 'removed') 
+      `,
+      [id]
+    );
+
+    if (records[0].active_count > 0) {
+      throw new Error(
+        "Không thể xóa tài liệu: vẫn còn bản ghi đang tồn tại hoặc đang lưu thông."
+      );
+    }
+
+    // 2️⃣ Đánh dấu tài liệu là không hoạt động (is_active = 0)
+    const [result] = await conn.query(
+      `
+      UPDATE documents
+      SET is_active = 0
+      WHERE id = ?
+      `,
+      [id]
+    );
+
+    await conn.commit();
+    return result.affectedRows > 0;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 
 // Lấy thông tin chi tiết của một sách

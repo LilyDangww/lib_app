@@ -3,23 +3,29 @@ const Borrow = require("../models/borrowModel");
 // ================== Tạo phiếu mượn ==================
 const createBorrow = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const { records, due_date } = req.body;
+    const librarian_id = req.user.id; // Người thao tác
+    const { user_id, records, due_date } = req.body; // Bạn đọc được mượn
+
+    if (!user_id) {
+      return res.status(400).json({ message: "Thiếu ID bạn đọc" });
+    }
 
     if (!records || records.length === 0) {
-      return res.status(400).json({ message: "No records provided" });
+      return res.status(400).json({ message: "Chưa chọn sách để mượn" });
     }
+
     if (records.length > 6) {
       return res
         .status(400)
-        .json({ message: "Cannot borrow more than 6 books" });
+        .json({ message: "Một phiếu mượn chỉ tối đa 6 quyển" });
     }
 
-    const borrowId = await Borrow.createBorrow(user_id, records, due_date);
+    const borrowInfo = await Borrow.createBorrow(user_id, records, due_date);
 
     res.status(201).json({
-      message: "Borrow created successfully",
-      borrowId,
+      message: "Tạo phiếu mượn thành công",
+      borrow: borrowInfo,
+      created_by: librarian_id, // để FE hiển thị nếu cần
     });
   } catch (error) {
     console.error("❌ Error createBorrow:", error);
@@ -66,16 +72,24 @@ const getAllBorrows = async (req, res) => {
   }
 };
 
-// ================== Trả sách ==================
+// Reader/Librarian trả sách
 const returnBook = async (req, res) => {
   try {
-    const { detail_id } = req.params;
-
-    await Borrow.updateBorrowDetailStatus(detail_id, "returned");
-
-    res.json({ message: "Book returned successfully" });
+    const { detailId } = req.params;
+    const result = await Borrow.returnBook(detailId);
+    await Borrow.updateBorrowTicketStatus(result.borrowId);
+    res.json({ message: "Trả sách thành công", ...result });
   } catch (error) {
-    console.error("❌ Error returnBook:", error);
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Cron: quá hạn chi tiết mượn
+const autoUpdateOverdue = async (_req, res) => {
+  try {
+    await Borrow.autoUpdateOverdue();
+    res.json({ message: "Đã cập nhật quá hạn cho chi tiết mượn" });
+  } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
@@ -104,4 +118,5 @@ module.exports = {
   getAllBorrows,
   returnBook,
   updateBorrowStatus,
+  autoUpdateOverdue,
 };

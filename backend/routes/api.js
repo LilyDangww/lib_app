@@ -6,7 +6,6 @@ const documentRoutes = require("./documentRoutes");
 const recordRoutes = require("./recordRoutes");
 const borrowRoutes = require("./borrowRoutes");
 const userRoutes = require("./userRoutes");
-const borrowDetailRoutes = require("./borrowDetailRoutes");
 const authRoutes = require("./authRoutes");
 const reservationRoutes = require("./reservationRoutes");
 
@@ -20,7 +19,6 @@ router.use("/documents", documentRoutes);
 router.use("/records", recordRoutes);
 router.use("/borrows", borrowRoutes);
 router.use("/users", userRoutes);
-router.use("/borrow-details", borrowDetailRoutes);
 router.use("/auth", authRoutes);
 router.use("/reservations", reservationRoutes);
 

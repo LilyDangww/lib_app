@@ -87,14 +87,14 @@ const updateRecord = async (req, res) => {
 // @desc    Xoá bản ghi
 // @route   DELETE /api/records/:id
 // @access  Admin/Thủ thư
+// 📘 Xóa bản ghi (đánh dấu là removed)
 const deleteRecord = async (req, res) => {
   try {
     const { id } = req.params;
-    await Record.deleteRecord(id);
-    res.json({ message: `Record ${id} deleted successfully` });
+    const result = await Record.deleteRecord(id);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("❌ Error in deleteRecord:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(400).json({ message: error.message });
   }
 };
 

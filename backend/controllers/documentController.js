@@ -134,30 +134,43 @@ const updateDocument = async (req, res) => {
 };
 
 //===========================================================================================
-// Xoá document (chuyển trạng thái is_active)
+// 📘 Xoá document (chỉ đánh dấu is_active = 0, không xóa vật lý)
 const deleteDocument = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Kiểm tra xem document có tồn tại không
+    // 1️⃣ Kiểm tra xem document có tồn tại không
     const document = await Document.getDocumentById(id);
     if (!document) {
-      return res.status(404).json({ message: "Document not found" });
+      return res.status(404).json({ message: "Tài liệu không tồn tại" });
     }
 
-    // Gọi model deleteDocument (chỉ update is_active)
+    // 2️⃣ Gọi hàm model deleteDocument (có kiểm tra record còn hoạt động)
     const deleted = await Document.deleteDocument(id);
 
     if (!deleted) {
-      return res.status(500).json({ message: "Failed to delete document" });
+      return res.status(400).json({
+        message:
+          "Không thể xoá tài liệu: vẫn còn bản ghi đang lưu thông hoặc đang sử dụng.",
+      });
     }
 
-    res.json({
-      message: "Document deactivated successfully",
+    // 3️⃣ Trả phản hồi thành công
+    res.status(200).json({
+      message:
+        "Tài liệu đã được chuyển sang trạng thái không hoạt động (is_active = 0).",
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    // ⚠️ Nếu là lỗi nghiệp vụ do throw từ model
+    if (
+      error.message.includes("bản ghi") ||
+      error.message.includes("không thể xóa")
+    ) {
+      return res.status(400).json({ message: error.message });
+    }
+
+    console.error("❌ Error in deleteDocument:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
 

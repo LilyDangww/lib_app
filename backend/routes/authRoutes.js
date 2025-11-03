@@ -101,7 +101,7 @@
  *             $ref: '#/components/schemas/AuthLogin'
  *           example:
  *             email: huephuongdang143@gmail.com
- *             password: 123456
+ *             password: "123456"
  *     responses:
  *       200:
  *         description: Đăng nhập thành công, trả về token

@@ -120,11 +120,44 @@ const updateRecord = async (id, data) => {
   return getRecordById(id);
 };
 
-// ============ DELETE ============
-// Xoá bản ghi
+// 🔄 Xóa bản ghi — chỉ đổi trạng thái, không xóa khỏi database
 const deleteRecord = async (id) => {
-  await pool.query(`DELETE FROM records WHERE id = ?`, [id]);
-  return { message: `Record ${id} deleted` };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1️⃣ Kiểm tra trạng thái bản ghi
+    const [[record]] = await conn.query(
+      `SELECT status FROM records WHERE id = ?`,
+      [id]
+    );
+
+    if (!record) {
+      throw new Error("Bản ghi không tồn tại");
+    }
+
+    if (record.status === "borrowed") {
+      throw new Error("Không thể xóa: bản ghi đang được mượn");
+    }
+
+    // 2️⃣ Cập nhật trạng thái
+    await conn.query(
+      `
+      UPDATE records
+      SET status = 'lost'
+      WHERE id = ?
+      `,
+      [id]
+    );
+
+    await conn.commit();
+    return { message: `Record ${id} đã được chuyển sang trạng thái 'lost'` };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 
 module.exports = {
