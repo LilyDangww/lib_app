@@ -148,6 +148,18 @@ const removeUser = async (req, res) => {
   }
 };
 
+// Người dùng tự xem thông tin bản thân (joined_at + role names)
+const getSelfProfile = async (req, res) => {
+  try {
+    const me = await User.getSelfProfile(req.user.id);
+    if (!me) return res.status(404).json({ message: "User not found" });
+    return res.json(me);
+  } catch (error) {
+    console.error("❌ Error in getSelfProfile:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   createUserByLibrarian,
   registerUser,
@@ -157,4 +169,5 @@ module.exports = {
   editUserSelf,
   editUserByLibrarian,
   removeUser,
+  getSelfProfile, // added
 };

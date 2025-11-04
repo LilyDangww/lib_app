@@ -1,17 +1,15 @@
-console.log("Permission");
 const isLibrarian = (req, res, next) => {
   if (req.user.role_id !== 2) {
-    // ví dụ role 2 = librarian
-    return res.status(403).json({ message: "Access denied" });
+    return res.status(403).json({ message: "Access denied. Librarian only." });
   }
   next();
 };
 
 const isReader = (req, res, next) => {
   if (req.user.role_id !== 3) {
-    // ví dụ role 3 = reader
-    return res.status(403).json({ message: "Access denied" });
+    return res.status(403).json({ message: "Access denied. Reader only." });
   }
   next();
 };
+
 module.exports = { isLibrarian, isReader };

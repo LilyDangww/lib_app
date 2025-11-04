@@ -38,13 +38,12 @@ const getMyBorrows = async (req, res) => {
   try {
     const { fromDate, toDate } = req.query;
 
-    // Lọc theo ngày tạo phiếu mượn
+    // Lấy theo chi tiết mượn + thông tin sách/record
     const rows = await Borrow.getBorrowsByUser(req.user.id, fromDate, toDate);
 
-    // Map hiển thị: reservation_id != null => "online", ngược lại => "at library"
     const mapped = rows.map((r) => ({
       ...r,
-      borrow_type: r.reservation_id ? "online" : "at_library",
+      borrow_type: r.reservation_detail_id ? "online" : "at_library",
     }));
 
     res.json(mapped);

@@ -263,6 +263,21 @@
 
 /**
  * @swagger
+ * /users/self:
+ *   get:
+ *     summary: Xem thông tin cá nhân (joined_at và vai trò)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OK
+ *       404:
+ *         description: User not found
+ */
+
+/**
+ * @swagger
  * /users/{id}:
  *   put:
  *     summary: Thủ thư chỉnh sửa thông tin người dùng
@@ -337,6 +352,7 @@ const {
   editUserSelf,
   editUserByLibrarian,
   removeUser,
+  getSelfProfile,
 } = require("../controllers/userController");
 
 // CRUD
@@ -358,6 +374,9 @@ router.get("/:id", permission.isLibrarian, getUser);
 
 // Người dùng tự chỉnh sửa thông tin của chính mình
 router.put("/self", authToken, editUserSelf);
+
+// Xem thông tin bản thân (reader hoặc librarian)
+router.get("/self", authToken, getSelfProfile);
 
 // Thủ thư chỉnh sửa thông tin người dùng (giới hạn quyền chỉnh sửa)
 router.put("/:id", permission.isLibrarian, editUserByLibrarian);

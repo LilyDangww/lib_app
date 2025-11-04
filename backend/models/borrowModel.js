@@ -207,6 +207,44 @@ const getBorrowById = async (id) => {
   return rows;
 };
 
+// Danh sách chi tiết mượn của user hiện thời (ưu tiên chi tiết + thông tin sách/record)
+const getBorrowsByUser = async (userId, fromDate, toDate) => {
+  let sql = `
+    SELECT
+      b.id AS borrow_id,
+      bd.id AS borrow_detail_id,
+      b.borrow_date,
+      b.due_date,
+      bd.status,
+      bd.return_date,
+      bd.reservation_detail_id,
+      d.id AS doc_id,
+      d.name AS document_name,
+      r.id AS record_id,
+      r.barcode AS record_code
+    FROM borrow_tickets b
+    JOIN borrow_details bd ON bd.borrow_id = b.id
+    JOIN records r ON r.id = bd.record_id
+    JOIN documents d ON d.id = r.doc_id
+    WHERE b.user_id = ?
+  `;
+  const params = [userId];
+
+  if (fromDate) {
+    sql += ` AND b.borrow_date >= ?`;
+    params.push(fromDate);
+  }
+  if (toDate) {
+    sql += ` AND b.borrow_date <= ?`;
+    params.push(toDate);
+  }
+
+  sql += ` ORDER BY b.borrow_date DESC, bd.id DESC`;
+
+  const [rows] = await pool.query(sql, params);
+  return rows;
+};
+
 // ============ UPDATE ============
 // Chỉ cập nhật trạng thái (không cho gia hạn)
 const updateBorrowStatus = async (id, status) => {
@@ -334,4 +372,5 @@ module.exports = {
   closeBorrow,
   updateBorrowTicketStatus,
   returnBook,
+  getBorrowsByUser, // added
 };

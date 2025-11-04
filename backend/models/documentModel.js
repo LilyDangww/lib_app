@@ -67,7 +67,7 @@ const getDocumentsForReaders = async (
   LEFT JOIN authors a ON da.author_id = a.id
   LEFT JOIN records r ON d.id = r.doc_id
   LEFT JOIN borrow_details bd ON r.id = bd.record_id
-  LEFT JOIN reviews rv ON d.id = rv.doc_id
+  LEFT JOIN reviews rv ON rv.borrow_detail_id = bd.id
   WHERE d.is_active = 1
 `;
 
@@ -186,13 +186,12 @@ const getDocumentById = async (id) => {
     LEFT JOIN doc_authors da ON d.id = da.doc_id
     LEFT JOIN authors a ON da.author_id = a.id
     LEFT JOIN records r ON d.id = r.doc_id
-    LEFT JOIN reviews rv ON d.id = rv.doc_id
+    LEFT JOIN borrow_details bd ON r.id = bd.record_id
+    LEFT JOIN reviews rv ON rv.borrow_detail_id = bd.id
     WHERE d.id = ?
     GROUP BY d.id
   `;
-
   const [rows] = await pool.query(query, [id]);
-
   return rows.length > 0 ? rows[0] : null;
 };
 

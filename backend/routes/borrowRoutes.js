@@ -303,22 +303,32 @@ const {
   autoUpdateOverdue,
 } = require("../controllers/borrowController");
 
-// Reader/Librarian: tạo phiếu mượn nên để Librarian thao tác (controller cũng nhận user_id mục tiêu)
-router.post("/", permission.isLibrarian, createBorrow);
+// Tạo phiếu mượn (thủ thư)
+router.post("/", authToken, permission.isLibrarian, createBorrow);
 
-// Reader xem phiếu mượn của mình (lọc ngày nếu có)
+// Reader xem phiếu mượn của mình
 router.get("/me", authToken, getMyBorrows);
 
-// Librarian xem tất cả phiếu mượn
-router.get("/", permission.isLibrarian, getAllBorrows);
+// Thủ thư xem tất cả phiếu mượn
+router.get("/", authToken, permission.isLibrarian, getAllBorrows);
 
-// Người dùng đã đăng nhập (reader hoặc librarian) trả sách
+// Trả sách (đã đăng nhập)
 router.patch("/details/:detailId/return", authToken, returnBook);
 
-// Cập nhật trạng thái phiếu mượn (active/closed) - chỉ Librarian
-router.put("/:id/status", permission.isLibrarian, updateBorrowStatus);
+// Cập nhật trạng thái phiếu mượn (thủ thư)
+router.put(
+  "/:id/status",
+  authToken,
+  permission.isLibrarian,
+  updateBorrowStatus
+);
 
-// Thủ thư chạy cron quá hạn
-router.post("/cron/overdue", permission.isLibrarian, autoUpdateOverdue);
+// Chạy quá hạn (thủ thư)
+router.post(
+  "/cron/overdue",
+  authToken,
+  permission.isLibrarian,
+  autoUpdateOverdue
+);
 
 module.exports = router;

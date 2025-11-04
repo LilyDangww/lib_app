@@ -64,7 +64,6 @@ const getUserByEmail = async (email) => {
   return rows[0];
 };
 
-
 // Lấy tất cả users
 const getAllUsers = async () => {
   const [rows] = await pool.query(
@@ -120,6 +119,25 @@ const deleteUser = async (id) => {
   return result.affectedRows;
 };
 
+// Người dùng tự xem thông tin bản thân (joined_at + role names)
+const getSelfProfile = async (userId) => {
+  const [rows] = await pool.query(
+    `
+    SELECT 
+      u.id, u.username, u.email, u.gender, u.dob, u.phone,
+      u.created_at AS joined_at,
+      COALESCE(GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ', '), '') AS roles
+    FROM users u
+    LEFT JOIN user_roles ur ON ur.user_id = u.id
+    LEFT JOIN roles r ON r.id = ur.role_id
+    WHERE u.id = ?
+    GROUP BY u.id
+    `,
+    [userId]
+  );
+  return rows[0] || null;
+};
+
 module.exports = {
   createUserByLibrarian,
   registerUser,
@@ -129,4 +147,5 @@ module.exports = {
   getUserById,
   updateUser,
   deleteUser,
+  getSelfProfile, // added
 };
