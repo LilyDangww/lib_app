@@ -192,7 +192,9 @@ const getBorrows = async (fromDate, toDate) => {
 const getBorrowById = async (id) => {
   const [rows] = await pool.query(
     `
-    SELECT bd.id as borrow_detail_id, d.name as document_name, 
+    SELECT bd.id as borrow_detail_id, 
+           d.name as document_name,
+           d.image_url AS document_image_url,   -- thêm ảnh
            b.borrow_date, b.due_date, bd.status,
            CASE WHEN bd.reservation_detail_id IS NOT NULL THEN 'Mượn online' ELSE 'Mượn tại chỗ' END as borrow_type
     FROM borrow_details bd
@@ -220,6 +222,7 @@ const getBorrowsByUser = async (userId, fromDate, toDate) => {
       bd.reservation_detail_id,
       d.id AS doc_id,
       d.name AS document_name,
+      d.image_url AS document_image_url,   
       r.id AS record_id,
       r.barcode AS record_code
     FROM borrow_tickets b

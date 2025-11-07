@@ -57,7 +57,7 @@ const getDocumentsForReaders = async (
 
   // Query dữ liệu chính
   let query = `
-  SELECT d.id, d.name,
+  SELECT d.id, d.name, d.image_url, d.cloudinary_id,
          GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
          IFNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
          COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) as available_count,
@@ -78,7 +78,7 @@ const getDocumentsForReaders = async (
 
   query += ` GROUP BY d.id `;
 
-  // Sắp xếp
+  // Sorting
   if (sort === "name_asc") query += " ORDER BY d.name ASC";
   else if (sort === "name_desc") query += " ORDER BY d.name DESC";
   else if (sort === "rating_high") query += " ORDER BY avg_rating DESC";
@@ -88,7 +88,7 @@ const getDocumentsForReaders = async (
   else if (sort === "most_borrowed") query += " ORDER BY total_borrowed DESC";
   else if (sort === "newest") query += " ORDER BY d.published_year DESC";
   else if (sort === "oldest") query += " ORDER BY d.published_year ASC";
-  else query += " ORDER BY d.created_at DESC"; // mặc định
+  else query += " ORDER BY d.created_at DESC";
 
   query += ` LIMIT ${limit} OFFSET ${offset}`;
 
@@ -131,13 +131,11 @@ const updateDocument = async (id, docData) => {
   return result.affectedRows > 0;
 };
 
-// ❌ Không xóa vật lý — chỉ đánh dấu is_active = 0 nếu không còn record sử dụng
 const deleteDocument = async (id) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // 1️⃣ Kiểm tra xem document này còn record nào hoạt động không
     const [records] = await conn.query(
       `
       SELECT COUNT(*) AS active_count
@@ -174,25 +172,132 @@ const deleteDocument = async (id) => {
   }
 };
 
-// Lấy thông tin chi tiết của một sách
+// Lấy thông tin chi tiết của một sách (thêm image_url)
 const getDocumentById = async (id) => {
-  const query = `
-    SELECT d.id, d.name, d.publisher_id, d.published_year, d.category_id, 
-           d.page_nums, d.description, d.is_active,
-           GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
-           IFNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
-           COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) as available_count
+  const [[doc]] = await pool.query(
+    `
+    SELECT 
+      d.id, d.name, d.published_year, d.page_nums, d.description, d.is_active,
+      d.publisher_id, p.name AS publisher_name,
+      d.category_id, c.category_name AS category_name,
+      d.image_url, d.cloudinary_id
     FROM documents d
-    LEFT JOIN doc_authors da ON d.id = da.doc_id
-    LEFT JOIN authors a ON da.author_id = a.id
-    LEFT JOIN records r ON d.id = r.doc_id
-    LEFT JOIN borrow_details bd ON r.id = bd.record_id
-    LEFT JOIN reviews rv ON rv.borrow_detail_id = bd.id
+    LEFT JOIN publishers p ON p.id = d.publisher_id
+    LEFT JOIN categories c ON c.id = d.category_id
     WHERE d.id = ?
-    GROUP BY d.id
-  `;
-  const [rows] = await pool.query(query, [id]);
-  return rows.length > 0 ? rows[0] : null;
+    `,
+    [id]
+  );
+  if (!doc) return null;
+
+  // 2) Tác giả
+  const [authors] = await pool.query(
+    `
+    SELECT a.id, a.name
+    FROM doc_authors da
+    JOIN authors a ON a.id = da.author_id
+    WHERE da.doc_id = ?
+    ORDER BY a.name
+    `,
+    [id]
+  );
+
+  // 3) Danh sách bản ghi (records)
+  const [records] = await pool.query(
+    `
+    SELECT r.id, r.barcode, r.status
+    FROM records r
+    WHERE r.doc_id = ?
+    ORDER BY r.id
+    `,
+    [id]
+  );
+
+  // 4) Thống kê số lượng bản ghi
+  const [[counts]] = await pool.query(
+    `
+    SELECT 
+      COUNT(*) AS total_count,
+      SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) AS available_count
+    FROM records r
+    WHERE r.doc_id = ?
+    `,
+    [id]
+  );
+
+  // 5) Thống kê rating (reviews via borrow_details)
+  const [[ratingAgg]] = await pool.query(
+    `
+    SELECT 
+      IFNULL(ROUND(AVG(rv.rating), 1), 0) AS avg_rating,
+      COUNT(rv.id) AS review_count
+    FROM records r
+    LEFT JOIN borrow_details bd ON bd.record_id = r.id
+    LEFT JOIN reviews rv ON rv.borrow_detail_id = bd.id
+    WHERE r.doc_id = ?
+    `,
+    [id]
+  );
+
+  // 6) Danh sách reviews (kèm reviewer và record)
+  const [reviews] = await pool.query(
+    `
+    SELECT 
+      rv.id, rv.rating, rv.content, rv.created_at, rv.updated_at,
+      rv.borrow_detail_id,
+      bd.record_id, r.barcode AS record_barcode,
+      b.user_id, u.username AS reviewer_name,
+      b.borrow_date, b.due_date, bd.return_date
+    FROM reviews rv
+    JOIN borrow_details bd ON bd.id = rv.borrow_detail_id
+    JOIN records r ON r.id = bd.record_id
+    JOIN borrow_tickets b ON b.id = bd.borrow_id
+    JOIN users u ON u.id = b.user_id
+    WHERE r.doc_id = ?
+    ORDER BY rv.created_at DESC
+    `,
+    [id]
+  );
+
+  return {
+    id: doc.id,
+    name: doc.name,
+    image_url: doc.image_url,
+    cloudinary_id: doc.cloudinary_id,
+    published_year: doc.published_year,
+    page_nums: doc.page_nums,
+    description: doc.description,
+    is_active: !!doc.is_active,
+    publisher: doc.publisher_id
+      ? { id: doc.publisher_id, name: doc.publisher_name }
+      : null,
+    category: doc.category_id
+      ? { id: doc.category_id, name: doc.category_name }
+      : null,
+    authors, // [{id, name}]
+    stats: {
+      total_count: Number(counts?.total_count || 0),
+      available_count: Number(counts?.available_count || 0),
+      avg_rating: Number(ratingAgg?.avg_rating || 0),
+      review_count: Number(ratingAgg?.review_count || 0),
+    },
+    records, // [{id, barcode, status}]
+    reviews: reviews.map((r) => ({
+      id: r.id,
+      rating: r.rating,
+      content: r.content,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      borrow_detail_id: r.borrow_detail_id,
+      record: { id: r.record_id, barcode: r.record_barcode },
+      reviewer: { id: r.user_id, username: r.reviewer_name },
+      borrow: {
+        borrow_date: r.borrow_date,
+        due_date: r.due_date,
+        return_date: r.return_date,
+      },
+    })),
+  };
 };
 
 //===========================================================================================
@@ -217,10 +322,11 @@ const getDocumentsForLibrarians = async (
   // Query lấy dữ liệu chính
   let query = `
     SELECT d.id, d.name,
+           d.image_url, d.cloudinary_id,
            GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
             d.published_year,
             d.page_nums,
-            c.name as category,
+            c.category_name as category,
             d.description,
             SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) as available_count,
             COUNT(bd.id) as total_borrowed

@@ -83,7 +83,8 @@ const createReservationWithDetails = async (
 
 const getReservationWithDetailsById = async (id) => {
   const [rows] = await pool.query(
-    `SELECT 
+    `
+    SELECT 
         rt.id AS reservation_id,
         rt.user_id, 
         u.username AS user_name,
@@ -95,14 +96,15 @@ const getReservationWithDetailsById = async (id) => {
         rd.record_id,
         r.barcode,
         d.name AS book_title,
+        d.image_url AS image_url,        -- thêm ảnh
         rd.status AS detail_status,
         rd.hold_start_at,
         rd.default_expire_at
      FROM reservation_tickets rt
      JOIN users u ON rt.user_id = u.id  
-      JOIN reservation_details rd ON rt.id = rd.reservation_id
-      JOIN records r ON rd.record_id = r.id
-      JOIN documents d ON r.doc_id = d.id
+     JOIN reservation_details rd ON rt.id = rd.reservation_id
+     JOIN records r ON rd.record_id = r.id
+     JOIN documents d ON r.doc_id = d.id
      WHERE rt.id = ?`,
     [id]
   );
@@ -262,7 +264,8 @@ const getUserHoldDetails = async (user_id, status = null) => {
       rd.hold_start_at,
       rd.default_expire_at,
       r.barcode,
-      d.name AS book_title
+      d.name AS book_title,
+      d.image_url AS image_url        -- thêm ảnh
     FROM reservation_tickets rt
     JOIN reservation_details rd ON rt.id = rd.reservation_id
     JOIN records r ON rd.record_id = r.id
@@ -307,7 +310,8 @@ const getReservationsWithDetails = async (
       rd.default_expire_at,
 
       r.barcode,
-      d.name AS book_title
+      d.name AS book_title,
+      d.image_url AS image_url        -- thêm ảnh
     FROM reservation_tickets rt
     JOIN users u ON rt.user_id = u.id
     JOIN reservation_details rd ON rt.id = rd.reservation_id

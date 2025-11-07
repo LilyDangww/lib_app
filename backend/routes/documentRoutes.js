@@ -203,20 +203,21 @@ const {
   getDocumentsForLibrarians,
 } = require("../controllers/documentController");
 
-//===========================================================================================
-// Public routes
-router.get("/", getDocumentsForReaders);
-router.get("/:id", getDocumentById);
-
-// Protected routes (cần token)
-router.post("/", authToken, permission.isLibrarian, addDocument);
-router.put("/:id", authToken, permission.isLibrarian, updateDocument);
-router.delete("/:id", authToken, permission.isLibrarian, deleteDocument);
+// LIST routes (cụ thể) luôn trước route động :id
 router.get(
   "/librarians",
   authToken,
   permission.isLibrarian,
   getDocumentsForLibrarians
 );
+router.get("/readers", getDocumentsForReaders); // hoặc gộp vào "/" nếu bạn dùng chung
+
+// Thêm mới / sửa / xóa
+router.post("/", authToken, permission.isLibrarian, addDocument);
+router.put("/:id", authToken, permission.isLibrarian, updateDocument);
+router.delete("/:id", authToken, permission.isLibrarian, deleteDocument);
+
+// Chi tiết (đặt cuối)
+router.get("/:id", getDocumentById);
 
 module.exports = router;
