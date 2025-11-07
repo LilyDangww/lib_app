@@ -358,30 +358,30 @@ const {
 // CRUD
 
 // Thêm user do thủ thư tạo (mật khẩu mặc định)
-router.post("/", permission.isLibrarian, createUserByLibrarian);
+router.post("/", authToken, permission.isLibrarian, createUserByLibrarian);
 
 // Đăng ký user (reader tự đăng ký)
 router.post("/register", registerUser);
 
 // Lấy user theo email
-router.get("/email/:email", permission.isLibrarian, getUserByEmail);
+router.get("/email/:email", authToken, permission.isLibrarian, getUserByEmail);
 
 // Lấy danh sách user
-router.get("/", permission.isLibrarian, getUsers);
-
-// Lấy 1 user theo id
-router.get("/:id", permission.isLibrarian, getUser);
-
-// Người dùng tự chỉnh sửa thông tin của chính mình
-router.put("/self", authToken, editUserSelf);
+router.get("/", authToken, permission.isLibrarian, getUsers);
 
 // Xem thông tin bản thân (reader hoặc librarian)
 router.get("/self", authToken, getSelfProfile);
 
+// Người dùng tự chỉnh sửa thông tin của chính mình
+router.put("/self", authToken, editUserSelf);
+
+// Lấy 1 user theo id
+router.get("/:id", authToken, permission.isLibrarian, getUser);
+
 // Thủ thư chỉnh sửa thông tin người dùng (giới hạn quyền chỉnh sửa)
-router.put("/:id", permission.isLibrarian, editUserByLibrarian);
+router.put("/:id", authToken, permission.isLibrarian, editUserByLibrarian);
 
 // Xóa user (soft delete)
-router.delete("/:id", permission.isLibrarian, removeUser);
+router.delete("/:id", authToken, permission.isLibrarian, removeUser);
 
 module.exports = router;

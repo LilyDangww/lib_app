@@ -4,11 +4,11 @@ const Reservation = require("../models/reservationModel");
 const createReservation = async (req, res) => {
   try {
     const user_id = req.user.id;
-    const { hold_type, record_ids, note } = req.body;
+    const { hold_type, document_ids, note } = req.body;
     const reservationId = await Reservation.createReservationWithDetails(
       user_id,
       hold_type,
-      record_ids,
+      document_ids,
       note
     );
     res.status(201).json({

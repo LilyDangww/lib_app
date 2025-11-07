@@ -126,7 +126,7 @@ const getSelfProfile = async (userId) => {
     SELECT 
       u.id, u.username, u.email, u.gender, u.dob, u.phone,
       u.created_at AS joined_at,
-      COALESCE(GROUP_CONCAT(DISTINCT r.name ORDER BY r.name SEPARATOR ', '), '') AS roles
+      COALESCE(GROUP_CONCAT(DISTINCT r.rolename ORDER BY r.rolename SEPARATOR ', '), '') AS roles
     FROM users u
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     LEFT JOIN roles r ON r.id = ur.role_id

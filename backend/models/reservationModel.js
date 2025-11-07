@@ -4,14 +4,14 @@ const { get } = require("../routes/recordRoutes");
 const createReservationWithDetails = async (
   user_id,
   hold_type = "hard",
-  record_ids,
+  document_ids,
   note = null
 ) => {
-  if (!record_ids || record_ids.length === 0) {
-    throw new Error("Cần chọn ít nhất 1 bản ghi để giữ");
+  if (!document_ids || document_ids.length === 0) {
+    throw new Error("Cần chọn ít nhất 1 tài liệu để giữ");
   }
-  if (record_ids.length > 2) {
-    throw new Error("Một phiếu giữ chỉ được phép tối đa 2 bản ghi");
+  if (document_ids.length > 2) {
+    throw new Error("Một phiếu giữ chỉ được phép tối đa 2 tài liệu");
   }
 
   const conn = await pool.getConnection();
@@ -31,7 +31,7 @@ const createReservationWithDetails = async (
       [user_id]
     );
 
-    const totalHolding = activeHold[0].cnt + record_ids.length;
+    const totalHolding = activeHold[0].cnt + document_ids.length;
     if (totalHolding > 2) {
       throw new Error(
         `Người dùng này đã giữ ${activeHold[0].cnt} bản ghi, chỉ có thể giữ tối đa 2 bản ghi cùng lúc.`
@@ -47,17 +47,21 @@ const createReservationWithDetails = async (
 
     const reservationId = ticketResult.insertId;
 
-    // ✅ Thêm chi tiết giữ cho từng record
-    for (let record_id of record_ids) {
+    const reservedRecordIds = [];
+
+    // ✅ Thêm chi tiết giữ cho từng tài liệu
+    for (let doc_id of document_ids) {
       const [[record]] = await conn.query(
-        `SELECT status FROM records WHERE id = ?`,
-        [record_id]
+        `SELECT id, status FROM records WHERE doc_id = ? AND status = 'available' LIMIT 1 FOR UPDATE`,
+        [doc_id]
       );
 
-      if (!record) throw new Error(`Record ${record_id} không tồn tại`);
-      if (record.status !== "available") {
-        throw new Error(`Record ${record_id} không khả dụng`);
+      if (!record) {
+        throw new Error(`Không tìm thấy bản ghi khả dụng cho tài liệu ${doc_id}`);
       }
+
+      const record_id = record.id;
+      reservedRecordIds.push(record_id);
 
       await conn.query(
         `INSERT INTO reservation_details (reservation_id, record_id, status, hold_start_at, default_expire_at)
@@ -72,7 +76,7 @@ const createReservationWithDetails = async (
     }
 
     await conn.commit();
-    return { reservationId, record_ids, hold_type };
+    return { reservationId, record_ids: reservedRecordIds, hold_type };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -260,6 +264,7 @@ const getUserHoldDetails = async (user_id, status = null) => {
       rd.id AS detail_id,
       rt.id AS reservation_id,
       rt.request_date,
+      rt.hold_type,
       rd.status AS detail_status,
       rd.hold_start_at,
       rd.default_expire_at,

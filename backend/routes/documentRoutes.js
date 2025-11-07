@@ -210,7 +210,8 @@ router.get(
   permission.isLibrarian,
   getDocumentsForLibrarians
 );
-router.get("/readers", getDocumentsForReaders); // hoặc gộp vào "/" nếu bạn dùng chung
+router.get("/", getDocumentsForReaders);
+router.get("/readers", getDocumentsForReaders); // giữ lộ trình cũ để tránh phá vỡ client đang dùng
 
 // Thêm mới / sửa / xóa
 router.post("/", authToken, permission.isLibrarian, addDocument);
