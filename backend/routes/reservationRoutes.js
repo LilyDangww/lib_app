@@ -342,6 +342,7 @@ const {
   updateReservationDetail, // Librarian: cập nhật chi tiết giữ theo barcode
   cancelReservationDetailReader, // Reader: hủy chi tiết giữ
   cancelReservation, // User & Librarian: hủy phiếu giữ
+  autoCancelPendingReservations, // Librarian: tự động hủy phiếu giữ pending > 5 ngày
 } = require("../controllers/reservationController");
 
 // ================== USER ================== //
@@ -407,6 +408,14 @@ router.post(
       res.status(500).json({ message: error.message });
     }
   }
+);
+
+// Cron route: auto-cancel pending > 5 days (librarian)
+router.post(
+  "/cron/auto-cancel-pending",
+  authToken,
+  permission.isLibrarian,
+  autoCancelPendingReservations
 );
 
 module.exports = router;

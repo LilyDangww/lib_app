@@ -258,14 +258,32 @@ const updateBorrowStatus = async (id, status) => {
   return getBorrowById(id);
 };
 
-// Auto update overdue
+// Auto expire borrow details overdue 35 days (via due_date) and sync ticket status
 const autoUpdateOverdue = async () => {
-  await pool.query(`
+  // 1) Mark details expired
+  const [res] = await pool.query(`
     UPDATE borrow_details bd
     JOIN borrow_tickets b ON bd.borrow_id = b.id
     SET bd.status = 'expired'
     WHERE bd.status = 'on_loan' AND b.due_date < CURDATE()
   `);
+
+  // 2) Re-check affected tickets and close when appropriate
+  const [ids] = await pool.query(`
+    SELECT DISTINCT bd.borrow_id
+    FROM borrow_details bd
+    JOIN borrow_tickets b ON bd.borrow_id = b.id
+    WHERE b.due_date < CURDATE()
+  `);
+
+  for (const row of ids) {
+    await updateBorrowTicketStatus(row.borrow_id);
+  }
+
+  return {
+    expired_details: res.affectedRows || 0,
+    affected_tickets: ids.length || 0,
+  };
 };
 
 const updateBorrowTicketStatus = async (borrowId) => {
@@ -371,9 +389,9 @@ module.exports = {
   getBorrows,
   getBorrowById,
   updateBorrowStatus,
-  autoUpdateOverdue,
+  autoUpdateOverdue, // updated logic
   closeBorrow,
   updateBorrowTicketStatus,
   returnBook,
-  getBorrowsByUser, // added
+  getBorrowsByUser,
 };

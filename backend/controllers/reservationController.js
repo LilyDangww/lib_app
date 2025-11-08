@@ -181,6 +181,16 @@ const cancelReservation = async (req, res) => {
   }
 };
 
+// Cron: auto-cancel pending > 5 days
+const autoCancelPendingReservations = async (_req, res) => {
+  try {
+    const result = await Reservation.autoCancelPendingReservations();
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createReservation,
   getUserHoldDetails,
@@ -190,4 +200,5 @@ module.exports = {
   updateReservationDetail,
   cancelReservationDetailReader,
   cancelReservation,
+  autoCancelPendingReservations,
 };

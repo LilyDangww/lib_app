@@ -57,7 +57,9 @@ const createReservationWithDetails = async (
       );
 
       if (!record) {
-        throw new Error(`Không tìm thấy bản ghi khả dụng cho tài liệu ${doc_id}`);
+        throw new Error(
+          `Không tìm thấy bản ghi khả dụng cho tài liệu ${doc_id}`
+        );
       }
 
       const record_id = record.id;
@@ -427,6 +429,50 @@ const expireOverdueReservations = async () => {
   }
 };
 
+// Auto-cancel reservations if not confirmed in 5 days (pending -> cancelled, records -> available)
+const autoCancelPendingReservations = async () => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) Cancel pending details older than 5 days and free records
+    const [upd] = await conn.query(
+      `
+      UPDATE reservation_details rd
+      JOIN reservation_tickets rt ON rd.reservation_id = rt.id
+      JOIN records r ON rd.record_id = r.id
+      SET rd.status = 'cancelled',
+          r.status = 'available'
+      WHERE rd.status = 'pending'
+        AND rt.request_date < DATE_SUB(NOW(), INTERVAL 5 DAY)
+      `
+    );
+
+    // 2) Close tickets that have no more pending/on_hold
+    await conn.query(
+      `
+      UPDATE reservation_tickets rt
+      SET rt.status = 'closed'
+      WHERE rt.status IN ('processing','active')
+        AND rt.request_date < DATE_SUB(NOW(), INTERVAL 5 DAY)
+        AND NOT EXISTS (
+          SELECT 1 FROM reservation_details rd
+          WHERE rd.reservation_id = rt.id
+            AND rd.status IN ('pending','on_hold')
+        )
+      `
+    );
+
+    await conn.commit();
+    return { cancelled_details: upd.affectedRows || 0 };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   createReservationWithDetails,
   getReservationById,
@@ -438,4 +484,5 @@ module.exports = {
   getUserHoldDetails,
   getReservationsWithDetails,
   expireOverdueReservations,
+  autoCancelPendingReservations, // added
 };

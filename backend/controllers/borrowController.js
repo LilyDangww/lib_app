@@ -86,8 +86,8 @@ const returnBook = async (req, res) => {
 // Cron: quá hạn chi tiết mượn
 const autoUpdateOverdue = async (_req, res) => {
   try {
-    await Borrow.autoUpdateOverdue();
-    res.json({ message: "Đã cập nhật quá hạn cho chi tiết mượn" });
+    const result = await Borrow.autoUpdateOverdue();
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
