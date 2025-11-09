@@ -326,6 +326,29 @@
  *         description: Lỗi khi thực hiện cron
  */
 
+/**
+ * @swagger
+ * /reservations/cron/auto-cancel-pending:
+ *   post:
+ *     summary: Tự động hủy các chi tiết giữ ở trạng thái pending quá 5 ngày và trả bản ghi về available
+ *     tags: [Reservations]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Đã hủy các chi tiết giữ pending quá 5 ngày và cập nhật trạng thái phiếu giữ liên quan
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 cancelled_details:
+ *                   type: integer
+ *                   example: 4
+ *       500:
+ *         description: Lỗi khi thực hiện cron
+ */
+
 const express = require("express");
 const router = express.Router();
 const authToken = require("../middleware/authToken");

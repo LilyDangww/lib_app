@@ -21,6 +21,7 @@ router.use("/borrows", borrowRoutes);
 router.use("/users", userRoutes);
 router.use("/auth", authRoutes);
 router.use("/reservations", reservationRoutes);
+router.use("/fines", require("./finesRoutes"));
 
 // router.use("/inventory", require("./inventoryRoutes"));
 

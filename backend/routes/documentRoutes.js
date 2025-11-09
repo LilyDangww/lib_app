@@ -8,6 +8,11 @@
 /**
  * @swagger
  * components:
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
  *   schemas:
  *     Document:
  *       type: object
@@ -40,6 +45,14 @@
  *           type: string
  *           description: Mô tả ngắn gọn về tài liệu
  *           example: "Cuốn sách này giới thiệu tổng quan về Node.js và các ví dụ thực hành."
+ *         image_url:
+ *           type: string
+ *           description: Cloudinary secure URL ảnh bìa
+ *           example: "https://res.cloudinary.com/demo/image/upload/v1700000000/library_documents/book_a.jpg"
+ *         cloudinary_id:
+ *           type: string
+ *           description: Cloudinary public_id để quản lý ảnh
+ *           example: "library_documents/book_a"
  *         is_active:
  *           type: boolean
  *           description: Tài liệu có đang được kích hoạt (hiển thị) hay không
@@ -106,12 +119,19 @@
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/Document'
+ *             type: object
+ *             properties:
+ *               name: { type: string, example: "Sách mới" }
+ *               category_id: { type: integer, example: 5 }
+ *               publisher_id: { type: integer, example: 3 }
+ *               published_year: { type: integer, example: 2024 }
+ *               page_nums: { type: integer, example: 250 }
+ *               description: { type: string, example: "Mô tả..." }
+ *               image: { type: string, format: binary, description: File ảnh (tùy chọn) }
  *     responses:
- *       201:
- *         description: Tài liệu được thêm thành công
+ *       201: { description: Tạo thành công }
  *       400:
  *         description: Dữ liệu không hợp lệ
  *       401:
@@ -136,12 +156,19 @@
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/Document'
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               category_id: { type: integer }
+ *               publisher_id: { type: integer }
+ *               published_year: { type: integer }
+ *               page_nums: { type: integer }
+ *               description: { type: string }
+ *               image: { type: string, format: binary, description: File ảnh mới (tùy chọn) }
  *     responses:
- *       200:
- *         description: Cập nhật thành công
+ *       200: { description: Cập nhật thành công }
  *       400:
  *         description: Dữ liệu không hợp lệ
  *       404:
@@ -189,10 +216,60 @@
  *                 $ref: '#/components/schemas/Document'
  */
 
+/**
+ * @swagger
+ * /documents/import:
+ *   post:
+ *     summary: Import nhiều tài liệu từ file CSV hoặc XLSX (chỉ thủ thư)
+ *     tags: [Documents]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File CSV/XLSX
+ *     responses:
+ *       200:
+ *         description: Kết quả import
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total: { type: integer, example: 10 }
+ *                 inserted: { type: integer, example: 8 }
+ *                 skipped: { type: integer, example: 2 }
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       row: { type: integer, example: 5 }
+ *                       message: { type: string, example: "Thiếu tên sách" }
+ *       400:
+ *         description: Không có file
+ *     description: |
+ *       Cột tối thiểu: name, category hoặc category_id.
+ *       Tùy chọn: publisher, published_year, page_nums, description, image_url, cloudinary_id, authors.
+ *       Ví dụ CSV:
+ *       name,category,publisher,published_year,page_nums,description,image_url,cloudinary_id,authors
+ *       "Book A","Science","Pub X",2022,320,"Mô tả A","https://res.cloudinary.com/demo/image/upload/v1/library_documents/a.jpg","library_documents/a","Tác giả 1;Tác giả 2"
+ *       "Book B","Literature","Pub Y",2021,200,"Mô tả B",,,"Tác giả 3"
+ */
+
 const express = require("express");
 const router = express.Router();
 const authToken = require("../middleware/authToken");
 const permission = require("../helpers/permission");
+const multer = require("multer");
+const upload = multer({ dest: "uploads/" });
 
 const {
   addDocument,
@@ -201,6 +278,7 @@ const {
   updateDocument,
   deleteDocument,
   getDocumentsForLibrarians,
+  importDocuments, // added
 } = require("../controllers/documentController");
 
 // LIST routes (cụ thể) luôn trước route động :id
@@ -214,9 +292,29 @@ router.get("/", getDocumentsForReaders);
 router.get("/readers", getDocumentsForReaders); // giữ lộ trình cũ để tránh phá vỡ client đang dùng
 
 // Thêm mới / sửa / xóa
-router.post("/", authToken, permission.isLibrarian, addDocument);
-router.put("/:id", authToken, permission.isLibrarian, updateDocument);
+router.post(
+  "/",
+  authToken,
+  permission.isLibrarian,
+  upload.single("image"), // thêm
+  addDocument
+);
+router.put(
+  "/:id",
+  authToken,
+  permission.isLibrarian,
+  upload.single("image"), // thêm
+  updateDocument
+);
 router.delete("/:id", authToken, permission.isLibrarian, deleteDocument);
+
+router.post(
+  "/import",
+  authToken,
+  permission.isLibrarian,
+  upload.single("file"),
+  importDocuments
+);
 
 // Chi tiết (đặt cuối)
 router.get("/:id", getDocumentById);

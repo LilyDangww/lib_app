@@ -243,6 +243,18 @@ const getDocumentsForLibrarians = async (req, res) => {
   }
 };
 
+const importDocuments = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const summary = await Document.importDocumentsFromFile(req.file.path);
+    res.json(summary);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  } finally {
+    if (req.file) require("fs").unlink(req.file.path, () => {});
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -250,4 +262,5 @@ module.exports = {
   getDocumentById,
   getDocumentsForReaders,
   getDocumentsForLibrarians,
+  importDocuments, // added
 };

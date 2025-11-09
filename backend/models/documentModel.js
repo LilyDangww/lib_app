@@ -1,4 +1,6 @@
 const pool = require("../config/db");
+const parse = require("csv-parse").parse;
+const xlsx = require("xlsx");
 
 //===========================================================================================
 // Thêm sách (chat)
@@ -10,11 +12,14 @@ const addDocument = async (docData) => {
     category_id,
     page_nums,
     description,
+    image_url, // mới
+    cloudinary_id, // mới
   } = docData;
 
   const [result] = await pool.query(
-    `INSERT INTO documents (name, publisher_id, published_year, category_id, page_nums, description) 
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO documents 
+     (name, publisher_id, published_year, category_id, page_nums, description, image_url, cloudinary_id) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name,
       publisher_id ?? null, // cho phép NULL
@@ -22,6 +27,8 @@ const addDocument = async (docData) => {
       category_id, // bắt buộc, không được NULL
       page_nums ?? null,
       description ?? null,
+      image_url ?? null,
+      cloudinary_id ?? null,
     ]
   );
 
@@ -106,7 +113,21 @@ const updateDocument = async (id, docData) => {
     category_id,
     page_nums,
     description,
+    image_url, // có thể undefined (giữ giá trị cũ)
+    cloudinary_id, // có thể undefined (giữ giá trị cũ)
   } = docData;
+
+  // Lấy giá trị hiện tại để tránh ghi null ngoài ý muốn
+  const [[existing]] = await pool.query(
+    `SELECT image_url, cloudinary_id FROM documents WHERE id = ?`,
+    [id]
+  );
+  if (!existing) return false;
+
+  const finalImageUrl =
+    image_url !== undefined ? image_url : existing.image_url;
+  const finalCloudinaryId =
+    cloudinary_id !== undefined ? cloudinary_id : existing.cloudinary_id;
 
   const [result] = await pool.query(
     `UPDATE documents 
@@ -115,7 +136,9 @@ const updateDocument = async (id, docData) => {
          published_year = ?, 
          category_id = ?, 
          page_nums = ?, 
-         description = ? 
+         description = ?,
+         image_url = ?,
+         cloudinary_id = ?
      WHERE id = ?`,
     [
       name,
@@ -124,6 +147,8 @@ const updateDocument = async (id, docData) => {
       category_id,
       page_nums ?? null,
       description ?? null,
+      finalImageUrl ?? null,
+      finalCloudinaryId ?? null,
       id,
     ]
   );
@@ -356,7 +381,153 @@ const getDocumentsForLibrarians = async (
     .catch((err) => console.error("SQL Error: ", err));
   return { page, limit, total, totalPages, data: rows };
 };
-//===========================================================================================
+
+async function getOrCreatePublisher(conn, name) {
+  if (!name) return null;
+  const [[row]] = await conn.query(`SELECT id FROM publishers WHERE name = ?`, [
+    name,
+  ]);
+  if (row) return row.id;
+  const [res] = await conn.query(`INSERT INTO publishers (name) VALUES (?)`, [
+    name,
+  ]);
+  return res.insertId;
+}
+
+async function getOrCreateCategory(conn, name) {
+  if (!name) return null;
+  const [[row]] = await conn.query(
+    `SELECT id FROM categories WHERE category_name = ?`,
+    [name]
+  );
+  if (row) return row.id;
+  const [res] = await conn.query(
+    `INSERT INTO categories (category_name) VALUES (?)`,
+    [name]
+  );
+  return res.insertId;
+}
+
+async function getOrCreateAuthor(conn, name) {
+  if (!name) return null;
+  const [[row]] = await conn.query(`SELECT id FROM authors WHERE name = ?`, [
+    name,
+  ]);
+  if (row) return row.id;
+  const [res] = await conn.query(`INSERT INTO authors (name) VALUES (?)`, [
+    name,
+  ]);
+  return res.insertId;
+}
+
+// Import tài liệu từ file CSV/XLSX
+const importDocumentsFromFile = async (filePath) => {
+  const ext = filePath.toLowerCase().endsWith(".xlsx") ? "xlsx" : "csv";
+  let rows = [];
+
+  if (ext === "xlsx") {
+    const wb = xlsx.readFile(filePath);
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    rows = xlsx.utils.sheet_to_json(sheet, { defval: "" });
+  } else {
+    const content = require("fs").readFileSync(filePath, "utf8");
+    rows = await new Promise((resolve, reject) => {
+      parse(
+        content,
+        { columns: true, trim: true, skip_empty_lines: true },
+        (err, out) => (err ? reject(err) : resolve(out))
+      );
+    });
+  }
+
+  const conn = await pool.getConnection();
+  const summary = { total: rows.length, inserted: 0, skipped: 0, errors: [] };
+
+  try {
+    await conn.beginTransaction();
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        const name = r.name?.trim();
+        if (!name) {
+          summary.skipped++;
+          continue;
+        }
+
+        // Category (ưu tiên category_id nếu có, else category tên)
+        let category_id = r.category_id ? Number(r.category_id) || null : null;
+        if (!category_id && r.category) {
+          category_id = await getOrCreateCategory(conn, r.category.trim());
+        }
+        if (!category_id) {
+          summary.skipped++;
+          continue;
+        }
+
+        let publisher_id = null;
+        if (r.publisher_id) publisher_id = Number(r.publisher_id) || null;
+        else if (r.publisher)
+          publisher_id = await getOrCreatePublisher(conn, r.publisher.trim());
+
+        const published_year = r.published_year
+          ? Number(r.published_year) || null
+          : null;
+        const page_nums = r.page_nums ? Number(r.page_nums) || null : null;
+        const description = r.description || null;
+        const image_url = r.image_url || null;
+        const cloudinary_id = r.cloudinary_id || null;
+
+        // Insert document
+        const [docRes] = await conn.query(
+          `INSERT INTO documents
+           (name, publisher_id, published_year, category_id, page_nums, description, image_url, cloudinary_id, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          [
+            name,
+            publisher_id ?? null,
+            published_year ?? null,
+            category_id,
+            page_nums ?? null,
+            description ?? null,
+            image_url ?? null,
+            cloudinary_id ?? null,
+          ]
+        );
+        const docId = docRes.insertId;
+
+        // Authors
+        if (r.authors) {
+          const authorNames = r.authors
+            .split(/[;,]/)
+            .map((x) => x.trim())
+            .filter(Boolean);
+          for (const aName of authorNames) {
+            const aId = await getOrCreateAuthor(conn, aName);
+            await conn.query(
+              `INSERT IGNORE INTO doc_authors (doc_id, author_id) VALUES (?, ?)`,
+              [docId, aId]
+            );
+          }
+        }
+
+        summary.inserted++;
+      } catch (e) {
+        summary.errors.push({ row: i + 1, message: e.message });
+        summary.skipped++;
+      }
+    }
+
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+
+  return summary;
+};
 
 module.exports = {
   addDocument,
@@ -365,4 +536,5 @@ module.exports = {
   deleteDocument,
   getDocumentById,
   getDocumentsForLibrarians,
+  importDocumentsFromFile, // added
 };
