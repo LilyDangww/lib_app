@@ -131,9 +131,10 @@
 
 const express = require("express");
 const router = express.Router();
-const { login, register } = require("../controllers/authController");
+const { login, register, loginAdmin } = require("../controllers/authController");
 
 router.post("/login", login);
 router.post("/register", register);
+router.post("/admin/login", loginAdmin);
 
 module.exports = router;

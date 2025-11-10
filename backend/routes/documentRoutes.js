@@ -279,6 +279,8 @@ const {
   deleteDocument,
   getDocumentsForLibrarians,
   importDocuments, // added
+  getCategories,
+  getPublishers,
 } = require("../controllers/documentController");
 
 // LIST routes (cụ thể) luôn trước route động :id
@@ -296,14 +298,12 @@ router.post(
   "/",
   authToken,
   permission.isLibrarian,
-  upload.single("image"), // thêm
   addDocument
 );
 router.put(
   "/:id",
   authToken,
   permission.isLibrarian,
-  upload.single("image"), // thêm
   updateDocument
 );
 router.delete("/:id", authToken, permission.isLibrarian, deleteDocument);
@@ -314,6 +314,20 @@ router.post(
   permission.isLibrarian,
   upload.single("file"),
   importDocuments
+);
+
+router.get(
+  "/categories",
+  authToken,
+  permission.isLibrarian,
+  getCategories
+);
+
+router.get(
+  "/publishers",
+  authToken,
+  permission.isLibrarian,
+  getPublishers
 );
 
 // Chi tiết (đặt cuối)

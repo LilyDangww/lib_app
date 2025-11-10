@@ -197,6 +197,36 @@ const deleteDocument = async (id) => {
   }
 };
 
+const getCategories = async () => {
+  const [rows] = await pool.query(
+    `
+    SELECT id, category_name
+    FROM categories
+    ORDER BY category_name ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.category_name,
+  }));
+};
+
+const getPublishers = async () => {
+  const [rows] = await pool.query(
+    `
+    SELECT id, name
+    FROM publishers
+    ORDER BY name ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+  }));
+};
+
 // Lấy thông tin chi tiết của một sách (thêm image_url)
 const getDocumentById = async (id) => {
   const [[doc]] = await pool.query(
@@ -346,15 +376,18 @@ const getDocumentsForLibrarians = async (
   const totalPages = Math.ceil(total / limit);
   // Query lấy dữ liệu chính
   let query = `
-    SELECT d.id, d.name,
-           d.image_url, d.cloudinary_id,
+    SELECT d.id,
+           d.name,
+           d.image_url,
+           d.cloudinary_id,
            GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
-            d.published_year,
-            d.page_nums,
-            c.category_name as category,
-            d.description,
-            SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) as available_count,
-            COUNT(bd.id) as total_borrowed
+           d.published_year,
+           d.page_nums,
+           d.category_id,
+           c.category_name as category,
+           d.description,
+           SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) as available_count,
+           COUNT(bd.id) as total_borrowed
     FROM documents d
     LEFT JOIN doc_authors da ON d.id = da.doc_id
     LEFT JOIN authors a ON da.author_id = a.id
@@ -537,4 +570,6 @@ module.exports = {
   getDocumentById,
   getDocumentsForLibrarians,
   importDocumentsFromFile, // added
+  getCategories,
+  getPublishers,
 };

@@ -32,6 +32,19 @@ const db = require("../config/db");
 
 const Document = require("../models/documentModel");
 
+const normalizeNullableNumber = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return null;
+  return parsed;
+};
+
+const normalizeNullableString = (value) => {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 // @desc    Add a new document
 // @route   POST /api/documents
 // @access  Private (admin/librarian)
@@ -46,24 +59,30 @@ const addDocument = async (req, res) => {
       category_id,
       page_nums,
       description,
+      image_url,
+      cloudinary_id,
     } = req.body;
 
+    const trimmedName = typeof name === "string" ? name.trim() : name;
     // Kiểm tra field bắt buộc
-    if (!name) {
+    if (!trimmedName) {
       return res.status(400).json({ message: "Document name is required" });
     }
-    if (!category_id) {
+    const normalizedCategoryId = normalizeNullableNumber(category_id);
+    if (!normalizedCategoryId) {
       return res.status(400).json({ message: "Category ID is required" });
     }
 
     // Gọi model
     const newDoc = await Document.addDocument({
-      name,
-      publisher_id: publisher_id || null,
-      published_year: published_year || null,
-      category_id,
-      page_nums: page_nums || null,
-      description: description || null,
+      name: trimmedName,
+      publisher_id: normalizeNullableNumber(publisher_id),
+      published_year: normalizeNullableNumber(published_year),
+      category_id: normalizedCategoryId,
+      page_nums: normalizeNullableNumber(page_nums),
+      description: normalizeNullableString(description),
+      image_url: normalizeNullableString(image_url),
+      cloudinary_id: normalizeNullableString(cloudinary_id),
     });
 
     res.status(201).json({
@@ -93,24 +112,31 @@ const updateDocument = async (req, res) => {
       category_id,
       page_nums,
       description,
+      image_url,
+      cloudinary_id,
     } = req.body;
 
+    const trimmedName = typeof name === "string" ? name.trim() : name;
     // Kiểm tra field bắt buộc
-    if (!name) {
+    if (!trimmedName) {
       return res.status(400).json({ message: "Document name is required" });
     }
-    if (!category_id) {
+    const normalizedCategoryId = normalizeNullableNumber(category_id);
+    if (!normalizedCategoryId) {
       return res.status(400).json({ message: "Category ID is required" });
     }
 
     // Gọi model
     const updatedDoc = await Document.updateDocument(id, {
-      name,
-      publisher_id: publisher_id || null,
-      published_year: published_year || null,
-      category_id,
-      page_nums: page_nums || null,
-      description: description || null,
+      name: trimmedName,
+      publisher_id: normalizeNullableNumber(publisher_id),
+      published_year: normalizeNullableNumber(published_year),
+      category_id: normalizedCategoryId,
+      page_nums: normalizeNullableNumber(page_nums),
+      description: normalizeNullableString(description),
+      image_url: image_url === undefined ? undefined : normalizeNullableString(image_url),
+      cloudinary_id:
+        cloudinary_id === undefined ? undefined : normalizeNullableString(cloudinary_id),
     });
 
     if (!updatedDoc) {
@@ -255,6 +281,26 @@ const importDocuments = async (req, res) => {
   }
 };
 
+const getCategories = async (_req, res) => {
+  try {
+    const categories = await Document.getCategories();
+    res.json(categories);
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const getPublishers = async (_req, res) => {
+  try {
+    const publishers = await Document.getPublishers();
+    res.json(publishers);
+  } catch (error) {
+    console.error("Error fetching publishers:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -263,4 +309,6 @@ module.exports = {
   getDocumentsForReaders,
   getDocumentsForLibrarians,
   importDocuments, // added
+  getCategories,
+  getPublishers,
 };
