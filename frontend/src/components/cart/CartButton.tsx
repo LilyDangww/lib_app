@@ -1,33 +1,33 @@
-'use client';
+"use client";
 
-import { useState, useMemo } from 'react';
-import { ShoppingCart, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { useShallow } from 'zustand/react/shallow';
+import { useState, useMemo } from "react";
+import { ShoppingCart, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useShallow } from "zustand/react/shallow";
 
-import { useCartStore } from '@/store';
-import { Button } from '@/components/ui/button';
+import { useCartStore } from "@/store";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { API_BASE_URL } from '@/utils/const';
+} from "@/components/ui/select";
+import { API_BASE_URL } from "@/utils/const";
 
-import CartItemCard from './CartItemCard';
+import CartItemCard from "./CartItemCard";
 
 export default function CartButton() {
   const [open, setOpen] = useState(false);
-  const [holdType, setHoldType] = useState<'hard' | 'soft'>('hard');
+  const [holdType, setHoldType] = useState<"hard" | "soft">("hard");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const items = useCartStore(useShallow((state) => state.items));
   const removeItem = useCartStore((state) => state.removeItem);
@@ -45,7 +45,7 @@ export default function CartButton() {
   const handleRemove = (bookId: string) => {
     const removed = removeItem(bookId);
     if (removed) {
-      toast.success('Đã xóa sách khỏi giỏ');
+      toast.success("Đã xóa sách khỏi giỏ");
     }
   };
 
@@ -54,24 +54,25 @@ export default function CartButton() {
       return;
     }
     clearCart();
-    toast.success('Đã làm trống giỏ sách');
+    toast.success("Đã làm trống giỏ sách");
   };
 
   const handleReservation = async () => {
     if (!hasItems) {
-      toast.info('Giỏ sách đang trống, hãy thêm sách trước.');
+      toast.info("Giỏ sách đang trống, hãy thêm sách trước.");
       return;
     }
 
     if (overLimit) {
-      toast.error('Bạn chỉ có thể giữ tối đa 2 tài liệu trong một lần.');
+      toast.error("Bạn chỉ có thể giữ tối đa 2 tài liệu trong một lần.");
       return;
     }
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
     if (!token) {
-      toast.error('Bạn cần đăng nhập để tạo phiếu giữ.');
+      toast.error("Bạn cần đăng nhập để tạo phiếu giữ.");
       return;
     }
 
@@ -81,9 +82,9 @@ export default function CartButton() {
       setIsSubmitting(true);
 
       const response = await fetch(`${API_BASE_URL}/reservations`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
@@ -95,14 +96,17 @@ export default function CartButton() {
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result?.message || 'Không thể tạo phiếu giữ, vui lòng thử lại.');
+        throw new Error(
+          result?.message || "Không thể tạo phiếu giữ, vui lòng thử lại."
+        );
       }
 
-      toast.success('Đã tạo phiếu giữ thành công.');
+      toast.success("Đã tạo phiếu giữ thành công.");
       clearCart();
       setOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Đã có lỗi xảy ra.';
+      const message =
+        error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
       toast.error(message);
     } finally {
       setIsSubmitting(false);
@@ -114,12 +118,12 @@ export default function CartButton() {
       <DialogTrigger asChild>
         <button
           type="button"
-          className="relative rounded-full p-2 text-gray-600 transition-colors hover:bg-teal-50 hover:text-teal-600"
+          className="relative rounded-full p-2 text-gray-600 transition-colors hover:bg-teal-50 hover:text-[#4F777A]"
           aria-label="Mở giỏ sách"
         >
           <ShoppingCart className="h-6 w-6" />
           {hasItems && (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-teal-600 text-[11px] font-semibold text-white">
+            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#4F777A] text-[11px] font-semibold text-white">
               {itemCount}
             </span>
           )}
@@ -148,12 +152,14 @@ export default function CartButton() {
               <div className="flex flex-col gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
                 <div className="flex flex-col gap-2 text-sm text-gray-600">
                   <div>
-                    <span className="font-medium text-gray-800">{itemCount}</span>{' '}
-                    {itemCount === 1 ? 'cuốn sách' : 'cuốn sách'} trong giỏ
+                    <span className="font-medium text-gray-800">
+                      {itemCount}
+                    </span>{" "}
+                    {itemCount === 1 ? "cuốn sách" : "cuốn sách"} trong giỏ
                   </div>
-                  <div className={overLimit ? 'text-red-600' : 'text-gray-500'}>
+                  <div className={overLimit ? "text-red-600" : "text-gray-500"}>
                     Tối đa 2 tài liệu mỗi phiếu giữ.{` `}
-                    {overLimit && 'Vui lòng giữ lại 2 tài liệu hoặc ít hơn.'}
+                    {overLimit && "Vui lòng giữ lại 2 tài liệu hoặc ít hơn."}
                   </div>
                 </div>
 
@@ -194,7 +200,7 @@ export default function CartButton() {
                       onClick={handleReservation}
                       disabled={!hasItems || overLimit || isSubmitting}
                     >
-                      {isSubmitting ? 'Đang tạo...' : 'Tạo phiếu giữ'}
+                      {isSubmitting ? "Đang tạo..." : "Tạo phiếu giữ"}
                     </Button>
                   </div>
                 </div>
@@ -204,7 +210,9 @@ export default function CartButton() {
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-200 py-12 text-center text-gray-500">
               <ShoppingCart className="h-8 w-8 text-gray-400" />
               <div>
-                <p className="text-sm font-medium text-gray-700">Giỏ sách trống</p>
+                <p className="text-sm font-medium text-gray-700">
+                  Giỏ sách trống
+                </p>
                 <p className="text-xs text-gray-500">
                   Thêm sách từ trang chi tiết để bắt đầu mượn.
                 </p>
@@ -216,4 +224,3 @@ export default function CartButton() {
     </Dialog>
   );
 }
-

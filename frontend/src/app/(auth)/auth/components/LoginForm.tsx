@@ -61,7 +61,7 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       });
 
       const result = await response.json();
-      
+
       console.log("🟢 Login API Response Data:", result);
 
       if (!response.ok) {
@@ -74,10 +74,10 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
         console.log("✅ Login Success - Storing token and user info");
         console.log("📦 Token:", result.token);
         console.log("👤 User Info:", result.user);
-        
+
         localStorage.setItem("token", result.token);
         localStorage.setItem("user", JSON.stringify(result.user));
-        
+
         // Dispatch event to notify Header and other components
         window.dispatchEvent(new Event("auth-state-changed"));
       }
@@ -85,7 +85,8 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       // Redirect to home page or dashboard
       router.push("/");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Đăng nhập thất bại";
+      const errorMessage =
+        err instanceof Error ? err.message : "Đăng nhập thất bại";
       setError(errorMessage);
       console.error("❌ Login Error:", {
         message: errorMessage,
@@ -114,9 +115,7 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
           type="email"
           placeholder="nguyenvana@gmail.com"
           startIcon={<Mail className="w-5 h-5 text-gray-400" />}
-          className={
-            loginForm.formState.errors.email ? "border-red-500" : ""
-          }
+          className={loginForm.formState.errors.email ? "border-red-500" : ""}
           disabled={isLoading}
         />
         {loginForm.formState.errors.email && (
@@ -189,7 +188,18 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
       <button
         type="submit"
         disabled={isLoading}
-        className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-3 px-4 rounded-md transition-colors duration-200 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        className="
+          w-full 
+          bg-[#4F777A] 
+          hover:bg-[#44696C]
+          text-white 
+          font-medium 
+          py-3 px-4 
+          rounded-md 
+          transition-colors 
+          duration-200
+          disabled:bg-gray-300 disabled:cursor-not-allowed
+        "
       >
         {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
       </button>
@@ -200,7 +210,7 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
         <button
           type="button"
           onClick={onSwitchToSignup}
-          className="text-blue-600 hover:underline font-medium"
+          className="text-[#4F777A] hover:underline font-medium"
           disabled={isLoading}
         >
           Đăng ký

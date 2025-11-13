@@ -44,7 +44,7 @@ const getDocumentsForReaders = async (
 ) => {
   const offset = (page - 1) * limit;
 
-  // Query tổng số document
+  // Đếm tổng: dùng DISTINCT vì có join authors khi search theo tác giả
   let countQuery = `
     SELECT COUNT(DISTINCT d.id) as total
     FROM documents d
@@ -62,30 +62,36 @@ const getDocumentsForReaders = async (
   const total = countResult[0].total;
   const totalPages = Math.ceil(total / limit);
 
-  // Query dữ liệu chính
+  // Data: tách AVG rating ra subquery theo doc_id để tránh nhân bản bởi authors
   let query = `
-  SELECT d.id, d.name, d.image_url, d.cloudinary_id,
-         GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
-         IFNULL(ROUND(AVG(rv.rating),1),0) as avg_rating,
-         COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) as available_count,
-         COUNT(DISTINCT bd.id) as total_borrowed
-  FROM documents d
-  LEFT JOIN doc_authors da ON d.id = da.doc_id
-  LEFT JOIN authors a ON da.author_id = a.id
-  LEFT JOIN records r ON d.id = r.doc_id
-  LEFT JOIN borrow_details bd ON r.id = bd.record_id
-  LEFT JOIN reviews rv ON rv.borrow_detail_id = bd.id
-  WHERE d.is_active = 1
-`;
-
+    SELECT 
+      d.id, d.name, d.image_url, d.cloudinary_id,
+      GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') AS authors,
+      IFNULL(rt.avg_rating, 0) AS avg_rating,
+      COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) AS available_count,
+      COUNT(DISTINCT bd.id) AS total_borrowed
+    FROM documents d
+    LEFT JOIN doc_authors da ON d.id = da.doc_id
+    LEFT JOIN authors a ON da.author_id = a.id
+    LEFT JOIN records r ON d.id = r.doc_id
+    LEFT JOIN borrow_details bd ON r.id = bd.record_id
+    /* subquery rating theo doc_id, không bị ảnh hưởng bởi join authors */
+    LEFT JOIN (
+      SELECT r2.doc_id, ROUND(AVG(rv2.rating), 1) AS avg_rating
+      FROM records r2
+      JOIN borrow_details bd2 ON bd2.record_id = r2.id
+      JOIN reviews rv2 ON rv2.borrow_detail_id = bd2.id
+      GROUP BY r2.doc_id
+    ) rt ON rt.doc_id = d.id
+    WHERE d.is_active = 1
+  `;
   if (category_id) query += ` AND d.category_id = ${pool.escape(category_id)}`;
   if (search)
     query += ` AND (d.name LIKE ${pool.escape("%" + search + "%")}
-              OR a.name LIKE ${pool.escape("%" + search + "%")})`;
+               OR a.name LIKE ${pool.escape("%" + search + "%")})`;
 
   query += ` GROUP BY d.id `;
 
-  // Sorting
   if (sort === "name_asc") query += " ORDER BY d.name ASC";
   else if (sort === "name_desc") query += " ORDER BY d.name DESC";
   else if (sort === "rating_high") query += " ORDER BY avg_rating DESC";
@@ -100,7 +106,6 @@ const getDocumentsForReaders = async (
   query += ` LIMIT ${limit} OFFSET ${offset}`;
 
   const [rows] = await pool.query(query);
-
   return { page, limit, total, totalPages, data: rows };
 };
 
@@ -275,7 +280,7 @@ const getDocumentById = async (id) => {
       COUNT(*) AS total_count,
       SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) AS available_count
     FROM records r
-    WHERE r.doc_id = ?
+    WHERE r.doc_id = ? AND r.status NOT IN ('lost','damaged','removed')
     `,
     [id]
   );
@@ -365,29 +370,40 @@ const getDocumentsForLibrarians = async (
   sort
 ) => {
   const offset = (page - 1) * limit;
-  // Query tổng số document
-  let countQuery = `SELECT COUNT(*) as total FROM documents d WHERE d.is_active = 1`;
+
+  // Đếm tổng: dùng DISTINCT + join authors để khớp filter search theo tác giả
+  let countQuery = `
+    SELECT COUNT(DISTINCT d.id) as total
+    FROM documents d
+    LEFT JOIN doc_authors da ON d.id = da.doc_id
+    LEFT JOIN authors a ON da.author_id = a.id
+    WHERE d.is_active = 1
+  `;
   if (category_id)
     countQuery += ` AND d.category_id = ${pool.escape(category_id)}`;
   if (search)
-    countQuery += ` AND d.name LIKE ${pool.escape("%" + search + "%")}`;
+    countQuery += ` AND (d.name LIKE ${pool.escape("%" + search + "%")}
+                      OR a.name LIKE ${pool.escape("%" + search + "%")})`;
+
   const [countResult] = await pool.query(countQuery);
   const total = countResult[0].total;
   const totalPages = Math.ceil(total / limit);
-  // Query lấy dữ liệu chính
+
+  // Data: COUNT DISTINCT để tránh nhân bản bởi join
   let query = `
     SELECT d.id,
            d.name,
            d.image_url,
            d.cloudinary_id,
-           GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') as authors,
+           GROUP_CONCAT(DISTINCT a.name SEPARATOR ', ') AS authors,
            d.published_year,
            d.page_nums,
            d.category_id,
-           c.category_name as category,
+           c.category_name AS category,
            d.description,
-           SUM(CASE WHEN r.status = 'available' THEN 1 ELSE 0 END) as available_count,
-           COUNT(bd.id) as total_borrowed
+           COUNT(DISTINCT r.id) AS total_records,
+           COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) AS available_count,
+           COUNT(DISTINCT bd.id) AS total_borrowed
     FROM documents d
     LEFT JOIN doc_authors da ON d.id = da.doc_id
     LEFT JOIN authors a ON da.author_id = a.id
@@ -398,20 +414,16 @@ const getDocumentsForLibrarians = async (
   `;
   if (category_id) query += ` AND d.category_id = ${pool.escape(category_id)}`;
   if (search)
-    query += ` AND (d.name LIKE ${pool.escape(
-      "%" + search + "%"
-    )} OR a.name LIKE ${pool.escape("%" + search + "%")})`;
-  query += `
-    GROUP BY d.id
-  `;
+    query += ` AND (d.name LIKE ${pool.escape("%" + search + "%")}
+               OR a.name LIKE ${pool.escape("%" + search + "%")})`;
+  query += ` GROUP BY d.id `;
   if (sort === "newest") query += " ORDER BY d.published_year DESC";
   else if (sort === "oldest") query += " ORDER BY d.published_year ASC";
   else if (sort === "most_borrowed") query += " ORDER BY total_borrowed DESC";
   else query += " ORDER BY d.created_at DESC";
   query += ` LIMIT ${limit} OFFSET ${offset}`;
-  const [rows] = await pool
-    .query(query)
-    .catch((err) => console.error("SQL Error: ", err));
+
+  const [rows] = await pool.query(query);
   return { page, limit, total, totalPages, data: rows };
 };
 

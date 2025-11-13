@@ -43,19 +43,24 @@ export default function AccountInfo() {
           const errorData = await response.json().catch(() => ({
             message: "Không thể tải thông tin người dùng",
           }));
-          throw new Error(errorData.message || "Không thể tải thông tin người dùng");
+          throw new Error(
+            errorData.message || "Không thể tải thông tin người dùng"
+          );
         }
 
         const data: UserProfile = await response.json();
         setUserProfile(data);
-        
+
         // Set form data from fetched profile
         setFormData({
           username: data.username || "",
           phone: data.phone || "",
         });
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Không thể tải thông tin người dùng";
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Không thể tải thông tin người dùng";
         toast.error(errorMessage);
         console.error("Error fetching user profile:", err);
       } finally {
@@ -68,7 +73,7 @@ export default function AccountInfo() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setIsLoading(true);
 
@@ -80,7 +85,7 @@ export default function AccountInfo() {
 
       // Prepare update data (only include fields that have changed)
       const updateData: { username?: string; phone?: string } = {};
-      
+
       if (formData.username !== userProfile?.username) {
         updateData.username = formData.username;
       }
@@ -111,7 +116,7 @@ export default function AccountInfo() {
       }
 
       toast.success("Cập nhật thông tin thành công!");
-      
+
       // Update userProfile with new data
       if (userProfile) {
         const updatedProfile = {
@@ -119,12 +124,13 @@ export default function AccountInfo() {
           ...updateData,
         };
         setUserProfile(updatedProfile);
-        
+
         // Update user data in localStorage using the hook
         updateUserFromProfile(updatedProfile);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Không thể cập nhật thông tin";
+      const errorMessage =
+        err instanceof Error ? err.message : "Không thể cập nhật thông tin";
       toast.error(errorMessage);
       console.error("Error updating user profile:", err);
     } finally {
@@ -134,9 +140,7 @@ export default function AccountInfo() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
-      <h1 className="text-2xl mb-6">
-        Thông tin tài khoản
-      </h1>
+      <h1 className="text-2xl mb-6">Thông tin tài khoản</h1>
 
       {/* Loading State */}
       {isFetching && (
@@ -160,12 +164,15 @@ export default function AccountInfo() {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <button type="button" className="absolute bottom-0 right-0 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-200">
+              <button
+                type="button"
+                className="absolute bottom-0 right-0 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-200"
+              >
                 <Camera className="w-3 h-3 text-gray-600" />
               </button>
             </div>
             <div>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white">
+              <Button className="bg-teal-600 hover:bg-[#4F777A] text-white">
                 Đổi avatar
               </Button>
               <p className="text-sm text-gray-500 mt-1">
@@ -180,7 +187,10 @@ export default function AccountInfo() {
               {/* Left Column */}
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="fullname" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="fullname"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Họ và tên
                   </label>
                   <Input
@@ -195,7 +205,10 @@ export default function AccountInfo() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Email
                   </label>
                   <div className="relative">
@@ -216,7 +229,10 @@ export default function AccountInfo() {
               {/* Right Column */}
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="phone"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Số điện thoại
                   </label>
                   <Input

@@ -106,10 +106,10 @@ export default function BookOverview({ book }: BookOverviewProps) {
               {book.authors?.map((author, index) => (
                 <span
                   key={author.id}
-                  className="inline-flex items-center rounded-full bg-teal-50 font-semibold text-teal-700"
+                  className="inline-flex items-center rounded-full bg-teal-50 font-semibold text-[#4F777A]"
                 >
                   {author.name}
-                  {index < authorList.length - 1 ? ',' : ''}
+                  {index < authorList.length - 1 ? "," : ""}
                 </span>
               ))}
             </div>
@@ -175,7 +175,7 @@ export default function BookOverview({ book }: BookOverviewProps) {
         {/* Add to Cart Button */}
         <div className="mb-6">
           <Button
-            className="flex items-center gap-2 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:hover:bg-gray-300"
+            className="flex items-center gap-2 px-6 py-3 bg-[#4F777A] hover:bg-teal-700 text-white font-medium rounded-lg transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:hover:bg-gray-300"
             type="button"
             onClick={handleAddToCart}
             disabled={isInCart}
@@ -186,7 +186,6 @@ export default function BookOverview({ book }: BookOverviewProps) {
         </div>
 
         <BookDescription book={book} />
-
       </div>
     </div>
   );

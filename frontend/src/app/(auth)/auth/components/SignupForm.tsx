@@ -32,8 +32,10 @@ interface SignupFormProps {
 
 export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
   const router = useRouter();
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -52,7 +54,6 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
       setError(null);
       setSuccess(false);
 
-      // Prepare data for API (using registerUser from userController)
       const requestData = {
         username: data.username,
         email: data.email,
@@ -77,11 +78,8 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
       }
 
       setSuccess(true);
-      
-      // Reset form
       signupForm.reset();
-      
-      // Redirect to login after successful signup
+
       setTimeout(() => {
         onSwitchToLogin();
       }, 2000);
@@ -98,12 +96,14 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
       onSubmit={signupForm.handleSubmit(onSignupSubmit)}
       className="space-y-5"
     >
+      {/* Error */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
 
+      {/* Success */}
       {success && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
           <p className="text-sm text-green-600">
@@ -112,7 +112,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
         </div>
       )}
 
-      {/* Full Name */}
+      {/* Username */}
       <div>
         <Input
           {...signupForm.register("username")}
@@ -138,9 +138,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
           type="email"
           placeholder="nguyenvana@gmail.com"
           startIcon={<Mail className="w-5 h-5 text-gray-400" />}
-          className={
-            signupForm.formState.errors.email ? "border-red-500" : ""
-          }
+          className={signupForm.formState.errors.email ? "border-red-500" : ""}
           disabled={isLoading}
         />
         {signupForm.formState.errors.email && (
@@ -157,9 +155,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
           type="tel"
           placeholder="Số điện thoại (9-11 chữ số)"
           startIcon={<Phone className="w-5 h-5 text-gray-400" />}
-          className={
-            signupForm.formState.errors.phone ? "border-red-500" : ""
-          }
+          className={signupForm.formState.errors.phone ? "border-red-500" : ""}
           disabled={isLoading}
         />
         {signupForm.formState.errors.phone && (
@@ -181,9 +177,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                 className="w-5 h-5 text-gray-400"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                aria-label="Lock icon"
               >
-                <title>Lock icon</title>
                 <rect
                   x="3"
                   y="11"
@@ -191,15 +185,13 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                   height="11"
                   rx="2"
                   ry="2"
-                  fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  fill="none"
                 />
                 <path
                   d="M7 11V7a5 5 0 0110 0v4"
-                  fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  fill="none"
                 />
               </svg>
             }
@@ -208,6 +200,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
             }
             disabled={isLoading}
           />
+
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
@@ -221,6 +214,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
             )}
           </button>
         </div>
+
         {signupForm.formState.errors.password && (
           <p className="mt-1 text-sm text-red-600">
             {signupForm.formState.errors.password.message}
@@ -228,7 +222,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
         )}
       </div>
 
-      {/* Confirm Password */}
+      {/* Confirm password */}
       <div>
         <div className="relative">
           <Input
@@ -240,9 +234,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                 className="w-5 h-5 text-gray-400"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                aria-label="Lock icon"
               >
-                <title>Lock icon</title>
                 <rect
                   x="3"
                   y="11"
@@ -250,15 +242,13 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
                   height="11"
                   rx="2"
                   ry="2"
-                  fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  fill="none"
                 />
                 <path
                   d="M7 11V7a5 5 0 0110 0v4"
-                  fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  fill="none"
                 />
               </svg>
             }
@@ -269,6 +259,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
             }
             disabled={isLoading}
           />
+
           <button
             type="button"
             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -282,6 +273,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
             )}
           </button>
         </div>
+
         {signupForm.formState.errors.confirmPassword && (
           <p className="mt-1 text-sm text-red-600">
             {signupForm.formState.errors.confirmPassword.message}
@@ -289,22 +281,37 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
         )}
       </div>
 
-      {/* Submit Button */}
+      {/* Submit button */}
       <button
         type="submit"
         disabled={isLoading || success}
-        className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-3 px-4 rounded-md transition-colors duration-200 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        className="
+          w-full
+          bg-[#4F777A]
+          hover:bg-[#44696C]
+          text-white
+          font-medium
+          py-3 px-4
+          rounded-md
+          transition-colors
+          duration-200
+          disabled:bg-gray-300 disabled:cursor-not-allowed
+        "
       >
-        {isLoading ? "Đang đăng ký..." : success ? "Đăng ký thành công!" : "Đăng ký"}
+        {isLoading
+          ? "Đang đăng ký..."
+          : success
+          ? "Đăng ký thành công!"
+          : "Đăng ký"}
       </button>
 
-      {/* Login Link */}
+      {/* Switch to login */}
       <div className="text-center text-sm">
         <span className="text-gray-600">Bạn đã có tài khoản? </span>
         <button
           type="button"
           onClick={onSwitchToLogin}
-          className="text-blue-600 hover:underline font-medium"
+          className="text-[#4F777A] hover:underline font-medium"
           disabled={isLoading}
         >
           Đăng nhập

@@ -27,7 +27,7 @@ export default function HeroSection() {
             {/* Left Content */}
             <div className="space-y-8">
               {/* Small Banner */}
-              <div className="inline-flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-full text-sm font-medium">
+              <div className="inline-flex items-center gap-2 bg-[#4F777A] text-white px-4 py-2 rounded-full text-sm font-medium">
                 <svg
                   className="w-4 h-4"
                   fill="currentColor"
@@ -56,13 +56,13 @@ export default function HeroSection() {
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link
                   href="/register"
-                  className="inline-flex items-center justify-center px-8 py-4 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors duration-200 shadow-lg hover:shadow-xl"
+                  className="inline-flex items-center justify-center px-8 py-4 bg-[#4F777A] text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors duration-200 shadow-lg hover:shadow-xl"
                 >
                   Đăng ký
                 </Link>
                 <Link
                   href="/books"
-                  className="inline-flex items-center justify-center px-8 py-4 border-2 border-teal-600 text-teal-600 font-semibold rounded-lg hover:bg-teal-50 transition-colors duration-200"
+                  className="inline-flex items-center justify-center px-8 py-4 border-2 border-[#4F777A] text-[#4F777A] font-semibold rounded-lg hover:bg-teal-50 transition-colors duration-200"
                 >
                   Xem sách
                 </Link>

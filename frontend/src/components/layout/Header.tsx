@@ -1,11 +1,15 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { User, LogOut } from 'lucide-react';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { useUser } from '@/hooks/useUser';
-import { CartButton } from '@/components/cart';
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { User, LogOut } from "lucide-react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { useUser } from "@/hooks/useUser";
+import { CartButton } from "@/components/cart";
 
 export default function Header() {
   const pathname = usePathname();
@@ -14,14 +18,14 @@ export default function Header() {
 
   const handleLogout = () => {
     clearUser();
-    router.push('/');
+    router.push("/");
     router.refresh();
   };
 
   // Helper function to check if a link is active
   const isActive = (href: string) => {
-    if (href === '/') {
-      return pathname === '/';
+    if (href === "/") {
+      return pathname === "/";
     }
     return pathname.startsWith(href);
   };
@@ -29,9 +33,10 @@ export default function Header() {
   // Helper function to get link classes based on active state
   const getLinkClasses = (href: string) => {
     const baseClasses = "transition-colors";
-    const activeClasses = "text-teal-600 border-b-2 border-teal-600 font-medium";
-    const inactiveClasses = "text-gray-600 hover:text-teal-600";
-    
+    const activeClasses =
+      "text-[#4F777A] border-b-2 border-[#4F777A] font-medium";
+    const inactiveClasses = "text-gray-600 hover:text-[#4F777A]";
+
     return `${baseClasses} ${isActive(href) ? activeClasses : inactiveClasses}`;
   };
 
@@ -42,33 +47,23 @@ export default function Header() {
           {/* Left Section - Logo and Navigation */}
           <div className="flex items-center space-x-8">
             {/* Logo */}
-            <Link href="/" className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center">
-                <div className="w-6 h-6 bg-white rounded-sm flex items-center justify-center">
-                  <div className="w-4 h-4 bg-teal-500 rounded-sm"></div>
-                </div>
-              </div>
-              <span className="text-xl font-bold text-teal-600">D Free Book</span>
+            <Link href="/" className="flex items-center">
+              <img
+                src="https://dfb.vn/_next/static/media/logo-main.8f4dc5e6.png"
+                alt="D Free Book Logo"
+                className="h-14 w-auto object-contain"
+              />
             </Link>
 
             {/* Navigation Links */}
             <nav className="hidden md:flex items-center space-x-6">
-              <Link 
-                href="/" 
-                className={getLinkClasses('/')}
-              >
+              <Link href="/" className={getLinkClasses("/")}>
                 Trang chủ
               </Link>
-              <Link 
-                href="/books" 
-                className={getLinkClasses('/books')}
-              >
+              <Link href="/books" className={getLinkClasses("/books")}>
                 Sách
               </Link>
-              <Link 
-                href="/contact" 
-                className={getLinkClasses('/contact')}
-              >
+              <Link href="/contact" className={getLinkClasses("/contact")}>
                 Liên hệ
               </Link>
             </nav>
@@ -88,14 +83,16 @@ export default function Header() {
               <Popover>
                 <PopoverTrigger asChild>
                   <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity focus:outline-none">
-                    <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center">
+                    <div className="w-8 h-8 bg-[#4F777A] rounded-full flex items-center justify-center">
                       <User className="w-5 h-5 text-white" />
                     </div>
                     <div className="hidden md:flex flex-col text-left">
                       <span className="text-sm font-medium text-gray-700">
                         {user.username}
                       </span>
-                      <span className="text-xs text-gray-500">{user.email}</span>
+                      <span className="text-xs text-gray-500">
+                        {user.email}
+                      </span>
                     </div>
                     <div className="md:hidden">
                       <span className="text-sm font-medium text-gray-700">
@@ -115,7 +112,7 @@ export default function Header() {
                         {user.email}
                       </p>
                     </div>
-                    
+
                     {/* User Profile Link */}
                     <Link
                       href="/user"
@@ -139,16 +136,16 @@ export default function Header() {
             ) : (
               // User is not logged in
               <>
-                <Link 
-                  href="/auth?tab=login" 
+                <Link
+                  href="/auth?tab=login"
                   className="text-gray-600 hover:text-teal-600 transition-colors"
                 >
                   Đăng nhập
                 </Link>
 
-                <Link 
-                  href="/auth?tab=signup" 
-                  className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                <Link
+                  href="/auth?tab=signup"
+                  className="bg-[#4F777A] hover:bg-[#3E6063] text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   Đăng ký
                 </Link>

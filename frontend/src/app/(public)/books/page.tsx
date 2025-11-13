@@ -5,7 +5,7 @@ import BooksHeader from "./components/BooksHeader";
 import BooksFilter from "./components/BooksFilter";
 import BooksList from "./components/BooksList";
 import Pagination from "@/components/Pagination";
-import { API_BASE_URL } from '@/utils/const';
+import { API_BASE_URL } from "@/utils/const";
 
 interface Book {
   id: string;
@@ -66,22 +66,24 @@ const mapSortOption = (sortBy: string): string | null => {
 const transformDocumentToBook = (doc: ApiDocument): Book => {
   const authorsArray = Array.isArray(doc.authors)
     ? doc.authors.filter((author): author is ApiAuthor => {
-        return typeof author?.name === "string" && author.name.trim().length > 0;
+        return (
+          typeof author?.name === "string" && author.name.trim().length > 0
+        );
       })
     : typeof doc.authors === "string" && doc.authors
-      ? [{ name: doc.authors }]
-      : [];
+    ? [{ name: doc.authors }]
+    : [];
 
   const authorNames = authorsArray.map((author) => author.name);
 
   return {
     id: doc.id.toString(),
     title: doc.name,
-    author: authorNames.length > 0 ? authorNames.join(", ") : "Không có tác giả",
+    author:
+      authorNames.length > 0 ? authorNames.join(", ") : "Không có tác giả",
     rating: Number(doc.avg_rating) || 0,
-    availability: doc.available_count > 0 
-      ? `Còn ${doc.available_count} cuốn` 
-      : "Hết sách",
+    availability:
+      doc.available_count > 0 ? `Còn ${doc.available_count} cuốn` : "Hết sách",
     imageUrl: doc.image_url,
   };
 };
@@ -164,7 +166,9 @@ export default function BooksPage() {
           const errorData = await response.json().catch(() => ({
             message: "Failed to fetch books",
           }));
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+          throw new Error(
+            errorData.message || `HTTP error! status: ${response.status}`
+          );
         }
 
         const data: ApiResponse = await response.json();
@@ -210,7 +214,7 @@ export default function BooksPage() {
         {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-600"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4F777A]"></div>
             <p className="mt-4 text-gray-600">Đang tải sách...</p>
           </div>
         )}
@@ -251,9 +255,7 @@ export default function BooksPage() {
               </>
             ) : (
               <div className="text-center py-12">
-                <p className="text-gray-600 text-lg">
-                  Không tìm thấy sách nào
-                </p>
+                <p className="text-gray-600 text-lg">Không tìm thấy sách nào</p>
                 <p className="text-gray-500 text-sm mt-2">
                   Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm
                 </p>

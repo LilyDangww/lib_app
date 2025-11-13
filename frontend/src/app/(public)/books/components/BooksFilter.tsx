@@ -1,5 +1,5 @@
-import type React from 'react';
-import { useState } from 'react';
+import type React from "react";
+import { useState } from "react";
 
 interface BooksFilterProps {
   onSearchChange?: (searchTerm: string) => void;
@@ -12,23 +12,23 @@ const BooksFilter: React.FC<BooksFilterProps> = ({
   onSearchChange,
   onAuthorSearchChange,
   onSortChange,
-  onCategoryChange
+  onCategoryChange,
 }) => {
-  const [activeCategory, setActiveCategory] = useState('Tất cả');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [authorTerm, setAuthorTerm] = useState('');
-  const [sortBy, setSortBy] = useState('');
+  const [activeCategory, setActiveCategory] = useState("Tất cả");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [authorTerm, setAuthorTerm] = useState("");
+  const [sortBy, setSortBy] = useState("");
 
   const categories = [
-    'Tất cả',
-    'Văn học',
-    'Kinh tế',
-    'Công nghệ',
-    'Thiếu nhi',
-    'Khoa học',
-    'Kỹ năng',
-    'Tâm lý',
-    'Lịch sử'
+    "Tất cả",
+    "Văn học",
+    "Kinh tế",
+    "Công nghệ",
+    "Thiếu nhi",
+    "Khoa học",
+    "Kỹ năng",
+    "Tâm lý",
+    "Lịch sử",
   ];
 
   const handleCategoryClick = (category: string) => {
@@ -62,9 +62,20 @@ const BooksFilter: React.FC<BooksFilterProps> = ({
         <div className="flex-1">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Search icon">
+              <svg
+                className="w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-label="Search icon"
+              >
                 <title>Search</title>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
             </div>
             <input
@@ -81,9 +92,20 @@ const BooksFilter: React.FC<BooksFilterProps> = ({
         <div className="flex-1">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="User icon">
+              <svg
+                className="w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-label="User icon"
+              >
                 <title>User</title>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
               </svg>
             </div>
             <input
@@ -113,9 +135,20 @@ const BooksFilter: React.FC<BooksFilterProps> = ({
               <option value="availability-asc">Còn ít nhất</option>
             </select>
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Dropdown arrow">
+              <svg
+                className="w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-label="Dropdown arrow"
+              >
                 <title>Dropdown</title>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </div>
           </div>
@@ -125,23 +158,26 @@ const BooksFilter: React.FC<BooksFilterProps> = ({
       {/* Category Buttons */}
       <div className="flex flex-wrap gap-2 mb-4">
         {categories.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => handleCategoryClick(category)}
-              className={`px-4 py-2 rounded-lg border transition-colors ${
-                activeCategory === category
-                  ? 'bg-teal-500 text-white border-teal-500'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-teal-300 hover:text-teal-600'
-              }`}
-            >
+          <button
+            key={category}
+            type="button"
+            onClick={() => handleCategoryClick(category)}
+            className={`px-4 py-2 rounded-lg border transition-colors ${
+              activeCategory === category
+                ? "bg-[#4F777A] text-white border-[#4F777A]"
+                : "bg-white text-gray-700 border-gray-300 hover:border-teal-300 hover:text-[#4F777A]"
+            }`}
+          >
             {category}
           </button>
         ))}
       </div>
 
       {/* View More Button */}
-      <button type="button" className="text-teal-600 border border-teal-500 bg-white px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors">
+      <button
+        type="button"
+        className="text-[#4F777A] border border-[#4F777A] bg-white px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors"
+      >
         Xem thêm
       </button>
     </div>
