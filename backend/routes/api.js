@@ -8,6 +8,7 @@ const borrowRoutes = require("./borrowRoutes");
 const userRoutes = require("./userRoutes");
 const authRoutes = require("./authRoutes");
 const reservationRoutes = require("./reservationRoutes");
+const dashboardRoutes = require("./dashboardRoutes");
 
 // ========== Test route gốc ==========
 router.get("/", (req, res) => {
@@ -22,6 +23,7 @@ router.use("/users", userRoutes);
 router.use("/auth", authRoutes);
 router.use("/reservations", reservationRoutes);
 router.use("/fines", require("./finesRoutes"));
+router.use("/dashboard", require("./dashboardRoutes"));
 
 // router.use("/inventory", require("./inventoryRoutes"));
 

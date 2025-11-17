@@ -4,18 +4,27 @@ const Reservation = require("../models/reservationModel");
 const createReservation = async (req, res) => {
   try {
     const user_id = req.user.id;
-    const { hold_type, document_ids, note } = req.body;
-    const reservationId = await Reservation.createReservationWithDetails(
+    // ❌ bỏ hold_type, chỉ nhận document_ids + note
+    const { document_ids, note } = req.body;
+
+    if (!Array.isArray(document_ids) || document_ids.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Cần chọn ít nhất 1 tài liệu để giữ" });
+    }
+
+    const { reservationId } = await Reservation.createReservationWithDetails(
       user_id,
-      hold_type,
       document_ids,
       note
     );
+
     res.status(201).json({
       message: "Reservation created successfully",
       reservationId,
     });
   } catch (error) {
+    console.error("❌ Error in createReservation:", error);
     res.status(400).json({ message: error.message });
   }
 };

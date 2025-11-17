@@ -35,9 +35,14 @@ const createUser = async (
 
 // ====== 2. Thủ thư thêm user ======
 // Không nhập mật khẩu, mặc định là "000000"
-const createUserByLibrarian = async (username, gender, email, dob, phone) => {
+// Chỉ cần username và phone, các trường khác để null
+const createUserByLibrarian = async (username, phone) => {
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash("000000", salt);
+
+  const gender = null;
+  const email = null;
+  const dob = null;
 
   return await createUser(username, hashedPassword, gender, email, dob, phone);
 };

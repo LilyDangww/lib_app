@@ -1,13 +1,15 @@
 const User = require("../models/userModel");
+
 // 1. Thủ thư thêm user (mật khẩu mặc định 000000)
 const createUserByLibrarian = async (req, res) => {
   try {
-    const { username, gender, email, dob, phone } = req.body;
+    // Chỉ cần username và phone
+    const { username, phone } = req.body;
 
-    if (!username.trim()) {
+    if (!username || !username.trim()) {
       return res.status(400).json({ message: "Tên không được để trống" });
     }
-    if (!phone.trim()) {
+    if (!phone || !phone.trim()) {
       return res
         .status(400)
         .json({ message: "Số điện thoại không được để trống" });
@@ -16,7 +18,8 @@ const createUserByLibrarian = async (req, res) => {
       return res.status(400).json({ message: "Số điện thoại không hợp lệ" });
     }
 
-    await User.createUserByLibrarian(username, gender, email, dob, phone);
+    // Model giờ chỉ nhận 2 tham số
+    await User.createUserByLibrarian(username.trim(), phone.trim());
 
     res.status(201).json({
       message:

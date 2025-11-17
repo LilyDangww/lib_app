@@ -1,9 +1,7 @@
 const pool = require("../config/db");
-const { get } = require("../routes/recordRoutes");
 
 const createReservationWithDetails = async (
   user_id,
-  hold_type = "hard",
   document_ids,
   note = null
 ) => {
@@ -18,7 +16,7 @@ const createReservationWithDetails = async (
   try {
     await conn.beginTransaction();
 
-    // ✅ Kiểm tra tổng số sách user đang giữ hoặc đang chờ duyệt
+    // Kiểm tra tổng số sách user đang giữ hoặc đang chờ duyệt
     const [activeHold] = await conn.query(
       `
       SELECT COUNT(rd.id) AS cnt
@@ -38,21 +36,23 @@ const createReservationWithDetails = async (
       );
     }
 
-    // ✅ Tạo phiếu giữ
+    // ✅ Tạo phiếu giữ – đã bỏ cột hold_type
     const [ticketResult] = await conn.query(
-      `INSERT INTO reservation_tickets (user_id, hold_type, status, request_date, note)
-       VALUES (?, ?, 'processing', NOW(), ?)`,
-      [user_id, hold_type, note]
+      `INSERT INTO reservation_tickets (user_id, status, request_date, note)
+       VALUES (?, 'processing', NOW(), ?)`,
+      [user_id, note]
     );
 
     const reservationId = ticketResult.insertId;
-
     const reservedRecordIds = [];
 
-    // ✅ Thêm chi tiết giữ cho từng tài liệu
+    // Thêm chi tiết giữ cho từng tài liệu
     for (let doc_id of document_ids) {
       const [[record]] = await conn.query(
-        `SELECT id, status FROM records WHERE doc_id = ? AND status = 'available' LIMIT 1 FOR UPDATE`,
+        `SELECT id, status 
+         FROM records 
+         WHERE doc_id = ? AND status = 'available' 
+         LIMIT 1 FOR UPDATE`,
         [doc_id]
       );
 
@@ -78,7 +78,8 @@ const createReservationWithDetails = async (
     }
 
     await conn.commit();
-    return { reservationId, record_ids: reservedRecordIds, hold_type };
+    // không cần trả hold_type nữa
+    return { reservationId, record_ids: reservedRecordIds };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -94,7 +95,6 @@ const getReservationWithDetailsById = async (id) => {
         rt.id AS reservation_id,
         rt.user_id, 
         u.username AS user_name,
-        rt.hold_type,
         rt.status AS ticket_status,
         rt.request_date,
         rt.note, 
@@ -102,7 +102,7 @@ const getReservationWithDetailsById = async (id) => {
         rd.record_id,
         r.barcode,
         d.name AS book_title,
-        d.image_url AS image_url,        -- thêm ảnh
+        d.image_url AS image_url,
         rd.status AS detail_status,
         rd.hold_start_at,
         rd.default_expire_at
@@ -136,7 +136,6 @@ const getReservationById = async (id) => {
         rt.id AS reservation_id,
         rt.user_id,
         u.username AS user_name,
-        rt.hold_type,
         rt.status AS ticket_status,
         rt.request_date,
         rt.note
@@ -266,13 +265,12 @@ const getUserHoldDetails = async (user_id, status = null) => {
       rd.id AS detail_id,
       rt.id AS reservation_id,
       rt.request_date,
-      rt.hold_type,
       rd.status AS detail_status,
       rd.hold_start_at,
       rd.default_expire_at,
       r.barcode,
       d.name AS book_title,
-      d.image_url AS image_url        -- thêm ảnh
+      d.image_url AS image_url
     FROM reservation_tickets rt
     JOIN reservation_details rd ON rt.id = rd.reservation_id
     JOIN records r ON rd.record_id = r.id
@@ -306,7 +304,6 @@ const getReservationsWithDetails = async (
       rt.user_id,
       u.username AS user_name,
       u.phone AS user_phone,
-      rt.hold_type,
       rt.status AS ticket_status,
       rt.request_date,
       rt.note,
@@ -318,7 +315,7 @@ const getReservationsWithDetails = async (
 
       r.barcode,
       d.name AS book_title,
-      d.image_url AS image_url        -- thêm ảnh
+      d.image_url AS image_url
     FROM reservation_tickets rt
     JOIN users u ON rt.user_id = u.id
     JOIN reservation_details rd ON rt.id = rd.reservation_id
