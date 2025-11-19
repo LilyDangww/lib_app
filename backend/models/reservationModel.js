@@ -296,8 +296,69 @@ const getReservationsWithDetails = async (
   startDate = null,
   endDate = null,
   userKeyword = null, // tìm theo tên, sđt, id
-  sort = "DESC"
+  sort = "DESC",
+  page = 1,
+  limit = 10
 ) => {
+  const offset = (page - 1) * limit;
+  
+  // Build WHERE clause for count and data queries
+  let whereClause = " WHERE 1=1";
+  const params = [];
+  const countParams = [];
+
+  // 🔹 Nếu truyền user_id (xem lịch sử của một bạn đọc cụ thể)
+  if (user_id) {
+    whereClause += " AND rt.user_id = ?";
+    params.push(user_id);
+    countParams.push(user_id);
+  }
+
+  // 🔹 Lọc theo từ khóa người dùng (tên / sđt / id)
+  if (userKeyword) {
+    if (!isNaN(userKeyword)) {
+      whereClause += " AND (u.phone LIKE ? OR u.id = ?)";
+      params.push(`%${userKeyword}%`, userKeyword);
+      countParams.push(`%${userKeyword}%`, userKeyword);
+    } else {
+      whereClause += " AND u.username LIKE ?";
+      params.push(`%${userKeyword}%`);
+      countParams.push(`%${userKeyword}%`);
+    }
+  }
+
+  // 🔹 Lọc theo trạng thái chi tiết giữ
+  if (status) {
+    whereClause += " AND rd.status = ?";
+    params.push(status);
+    countParams.push(status);
+  }
+
+  // 🔹 Lọc theo khoảng thời gian (chuẩn, ngắn gọn)
+  if (startDate || endDate) {
+    const s = startDate ? `${startDate} 00:00:00` : "1970-01-01 00:00:00";
+    const e = endDate ? `${endDate} 23:59:59` : "2999-12-31 23:59:59";
+    whereClause += " AND rt.request_date BETWEEN ? AND ?";
+    params.push(s, e);
+    countParams.push(s, e);
+  }
+
+  // Count total records
+  let countQuery = `
+    SELECT COUNT(*) as total
+    FROM reservation_tickets rt
+    JOIN users u ON rt.user_id = u.id
+    JOIN reservation_details rd ON rt.id = rd.reservation_id
+    JOIN records r ON rd.record_id = r.id
+    JOIN documents d ON r.doc_id = d.id
+    ${whereClause}
+  `;
+
+  const [countResult] = await pool.query(countQuery, countParams);
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+
+  // Get paginated data
   let query = `
     SELECT 
       rt.id AS reservation_id,
@@ -321,47 +382,16 @@ const getReservationsWithDetails = async (
     JOIN reservation_details rd ON rt.id = rd.reservation_id
     JOIN records r ON rd.record_id = r.id
     JOIN documents d ON r.doc_id = d.id
-    WHERE 1=1
+    ${whereClause}
   `;
-
-  const params = [];
-
-  // 🔹 Nếu truyền user_id (xem lịch sử của một bạn đọc cụ thể)
-  if (user_id) {
-    query += " AND rt.user_id = ?";
-    params.push(user_id);
-  }
-
-  // 🔹 Lọc theo từ khóa người dùng (tên / sđt / id)
-  if (userKeyword) {
-    if (!isNaN(userKeyword)) {
-      query += " AND (u.phone LIKE ? OR u.id = ?)";
-      params.push(`%${userKeyword}%`, userKeyword);
-    } else {
-      query += " AND u.username LIKE ?";
-      params.push(`%${userKeyword}%`);
-    }
-  }
-
-  // 🔹 Lọc theo trạng thái chi tiết giữ
-  if (status) {
-    query += " AND rd.status = ?";
-    params.push(status);
-  }
-
-  // 🔹 Lọc theo khoảng thời gian (chuẩn, ngắn gọn)
-  if (startDate || endDate) {
-    const s = startDate ? `${startDate} 00:00:00` : "1970-01-01 00:00:00";
-    const e = endDate ? `${endDate} 23:59:59` : "2999-12-31 23:59:59";
-    query += " AND rt.request_date BETWEEN ? AND ?";
-    params.push(s, e);
-  }
 
   // 🔹 Sắp xếp
   query += ` ORDER BY rt.request_date ${sort === "ASC" ? "ASC" : "DESC"}`;
+  query += ` LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
 
   const [rows] = await pool.query(query, params);
-  return rows;
+  return { page, limit, total, totalPages, data: rows };
 };
 
 // Tự động hết hạn phiếu giữ (quá 2 ngày kể từ request_date)
@@ -470,6 +500,33 @@ const autoCancelPendingReservations = async () => {
   }
 };
 
+// 📚 Get all reservation tickets for librarian (no pagination, returns all data)
+const getAllReservationsForLibrarian = async () => {
+  const query = `
+    SELECT 
+      rt.id AS reservation_id,
+      rt.user_id,
+      u.username AS user_name,
+      u.phone AS user_phone,
+      u.email AS user_email,
+      rt.hold_type,
+      rt.status AS ticket_status,
+      rt.request_date,
+      rt.note,
+      rd.id AS detail_id,
+      rd.status AS detail_status,
+      rd.hold_start_at,
+      rd.default_expire_at
+    FROM reservation_tickets rt
+    JOIN users u ON rt.user_id = u.id
+    JOIN reservation_details rd ON rt.id = rd.reservation_id
+    ORDER BY rt.request_date DESC
+  `;
+
+  const [rows] = await pool.query(query);
+  return rows;
+};
+
 module.exports = {
   createReservationWithDetails,
   getReservationById,
@@ -481,5 +538,6 @@ module.exports = {
   getUserHoldDetails,
   getReservationsWithDetails,
   expireOverdueReservations,
-  autoCancelPendingReservations, // added
+  autoCancelPendingReservations,
+  getAllReservationsForLibrarian,
 };

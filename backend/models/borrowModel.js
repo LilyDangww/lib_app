@@ -136,11 +136,12 @@ const createBorrow = async (user_id, records) => {
           borrow_id,
           record_id,
           reservation_detail_id,
+          due_date,
           status
         )
-        VALUES (?, ?, ?, 'on_loan')
+        VALUES (?, ?, ?, ?, 'on_loan')
       `,
-        [borrowId, recordId, reservationDetailId || null]
+        [borrowId, recordId, reservationDetailId || null, due_date]
       );
 
       // 5️⃣ Cập nhật trạng thái bản ghi vật lý -> on_loan
@@ -166,7 +167,31 @@ const createBorrow = async (user_id, records) => {
 
 // ============ READ ============
 // Danh sách phiếu mượn
-const getBorrows = async (fromDate, toDate) => {
+const getBorrows = async (fromDate, toDate, page = 1, limit = 10) => {
+  const offset = (page - 1) * limit;
+  
+  // Count total records
+  let countQuery = `
+    SELECT COUNT(*) as total
+    FROM borrow_tickets b
+    JOIN users u ON b.user_id = u.id
+    WHERE 1=1
+  `;
+  const countParams = [];
+  if (fromDate) {
+    countQuery += ` AND b.borrow_date >= ?`;
+    countParams.push(fromDate);
+  }
+  if (toDate) {
+    countQuery += ` AND b.borrow_date <= ?`;
+    countParams.push(toDate);
+  }
+  
+  const [countResult] = await pool.query(countQuery, countParams);
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+
+  // Get paginated data
   let query = `
     SELECT b.id, u.username as user_name, b.borrow_date, b.due_date, b.status
     FROM borrow_tickets b
@@ -182,31 +207,60 @@ const getBorrows = async (fromDate, toDate) => {
     query += ` AND b.borrow_date <= ?`;
     params.push(toDate);
   }
-  query += ` ORDER BY b.borrow_date DESC`;
+  query += ` ORDER BY b.borrow_date DESC LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
 
   const [rows] = await pool.query(query, params);
-  return rows;
+  return { page, limit, total, totalPages, data: rows };
 };
 
 // Lấy chi tiết phiếu mượn (reader hoặc librarian)
 const getBorrowById = async (id) => {
-  const [rows] = await pool.query(
+  // Get ticket info with user
+  const [[ticketInfo]] = await pool.query(
     `
-    SELECT bd.id as borrow_detail_id, 
-           d.name as document_name,
-           d.image_url AS document_image_url,   -- thêm ảnh
-           b.borrow_date, b.due_date, bd.status,
-           CASE WHEN bd.reservation_detail_id IS NOT NULL THEN 'Mượn online' ELSE 'Mượn tại chỗ' END as borrow_type
-    FROM borrow_details bd
-    JOIN borrow_tickets b ON bd.borrow_id = b.id
-    JOIN records r ON bd.record_id = r.id
-    JOIN documents d ON r.doc_id = d.id
+    SELECT b.id as borrow_id,
+           b.user_id,
+           u.username as user_name,
+           b.borrow_date,
+           b.due_date,
+           b.status as ticket_status
+    FROM borrow_tickets b
+    JOIN users u ON b.user_id = u.id
     WHERE b.id = ?
-  `,
+    `,
     [id]
   );
 
-  return rows;
+  if (!ticketInfo) {
+    return null;
+  }
+
+  // Get borrow details (books)
+  const [details] = await pool.query(
+    `
+    SELECT bd.id as borrow_detail_id,
+           bd.record_id,
+           r.barcode as record_barcode,
+           bd.status as detail_status,
+           bd.return_date,
+           d.id as document_id,
+           d.name as document_name,
+           d.image_url AS document_image_url,
+           CASE WHEN bd.reservation_detail_id IS NOT NULL THEN 'Mượn online' ELSE 'Mượn tại chỗ' END as borrow_type
+    FROM borrow_details bd
+    JOIN records r ON bd.record_id = r.id
+    JOIN documents d ON r.doc_id = d.id
+    WHERE bd.borrow_id = ?
+    ORDER BY bd.id
+    `,
+    [id]
+  );
+
+  return {
+    ticket: ticketInfo,
+    details: details || [],
+  };
 };
 
 // Danh sách chi tiết mượn của user hiện thời (ưu tiên chi tiết + thông tin sách/record)

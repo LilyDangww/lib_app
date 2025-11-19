@@ -251,16 +251,16 @@ const getDocumentsForLibrarians = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const category_id = req.query.category_id || null;
     const search = req.query.search || null;
     const sort = req.query.sort || null;
-    const status = req.query.status || null; // all, available, borrowed
 
     const result = await Document.getDocumentsForLibrarians(
       page,
       limit,
+      category_id,
       search,
-      sort,
-      status
+      sort
     );
     res.json(result);
   } catch (error) {
@@ -301,6 +301,29 @@ const getPublishers = async (_req, res) => {
   }
 };
 
+//===========================================================================================
+// Lấy danh sách tất cả bản ghi của một tài liệu
+const getDocumentRecords = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Kiểm tra document có tồn tại không
+    const document = await Document.getDocumentById(id);
+    if (!document) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    // Lấy danh sách records từ Record model
+    const Record = require("../models/recordModel");
+    const records = await Record.getRecords({ doc_id: id });
+
+    res.json(records);
+  } catch (error) {
+    console.error("Error fetching document records:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -311,4 +334,5 @@ module.exports = {
   importDocuments, // added
   getCategories,
   getPublishers,
+  getDocumentRecords,
 };

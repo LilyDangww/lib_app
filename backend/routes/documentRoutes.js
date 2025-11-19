@@ -281,6 +281,7 @@ const {
   importDocuments, // added
   getCategories,
   getPublishers,
+  getDocumentRecords,
 } = require("../controllers/documentController");
 
 // LIST routes (cụ thể) luôn trước route động :id
@@ -328,6 +329,14 @@ router.get(
   authToken,
   permission.isLibrarian,
   getPublishers
+);
+
+// Lấy danh sách records của một document (phải đặt trước /:id)
+router.get(
+  "/:id/records",
+  authToken,
+  permission.isLibrarian,
+  getDocumentRecords
 );
 
 // Chi tiết (đặt cuối)

@@ -4,7 +4,7 @@ const Borrow = require("../models/borrowModel");
 const createBorrow = async (req, res) => {
   try {
     const librarian_id = req.user.id; // Người thao tác
-    const { user_id, records, due_date } = req.body; // Bạn đọc được mượn
+    const { user_id, records } = req.body; // Bạn đọc được mượn
 
     if (!user_id) {
       return res.status(400).json({ message: "Thiếu ID bạn đọc" });
@@ -20,7 +20,8 @@ const createBorrow = async (req, res) => {
         .json({ message: "Một phiếu mượn chỉ tối đa 6 quyển" });
     }
 
-    const borrowInfo = await Borrow.createBorrow(user_id, records, due_date);
+    // Model tự động tính due_date = borrow_date + 35 ngày
+    const borrowInfo = await Borrow.createBorrow(user_id, records);
 
     res.status(201).json({
       message: "Tạo phiếu mượn thành công",
@@ -56,15 +57,21 @@ const getMyBorrows = async (req, res) => {
 // ================== Lấy tất cả phiếu mượn cho thủ thư ==================
 const getAllBorrows = async (req, res) => {
   try {
-    const { fromDate, toDate } = req.query;
-    const rows = await Borrow.getBorrows(fromDate, toDate);
+    const { fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    
+    const result = await Borrow.getBorrows(fromDate, toDate, pageNum, limitNum);
 
-    const mapped = rows.map((r) => ({
+    const mapped = result.data.map((r) => ({
       ...r,
       borrow_type: r.reservation_id ? "online" : "at_library",
     }));
 
-    res.json(mapped);
+    res.json({
+      ...result,
+      data: mapped
+    });
   } catch (error) {
     console.error("❌ Error getAllBorrows:", error);
     res.status(500).json({ message: error.message });
@@ -93,6 +100,24 @@ const autoUpdateOverdue = async (_req, res) => {
   }
 };
 
+// ================== Lấy chi tiết phiếu mượn theo ID ==================
+const getBorrowById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await Borrow.getBorrowById(id);
+
+    if (!result) {
+      return res.status(404).json({ message: "Phiếu mượn không tồn tại" });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("❌ Error getBorrowById:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // ================== Cập nhật trạng thái phiếu mượn ==================
 const updateBorrowStatus = async (req, res) => {
   try {
@@ -115,6 +140,7 @@ module.exports = {
   createBorrow,
   getMyBorrows,
   getAllBorrows,
+  getBorrowById,
   returnBook,
   updateBorrowStatus,
   autoUpdateOverdue,

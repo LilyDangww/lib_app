@@ -1,4 +1,5 @@
 const Reservation = require("../models/reservationModel");
+const pool = require("../config/db");
 
 // Tạo phiếu giữ
 const createReservation = async (req, res) => {
@@ -32,18 +33,22 @@ const createReservation = async (req, res) => {
 // GET /api/reservations/librarian/list?status=on_hold&startDate=2025-10-20
 const getReservationsForLibrarian = async (req, res) => {
   try {
-    const { status, startDate, endDate, userKeyword, sort } = req.query;
+    const { status, startDate, endDate, userKeyword, sort, page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
 
-    const reservations = await Reservation.getReservationsWithDetails(
+    const result = await Reservation.getReservationsWithDetails(
       null, // ❌ không truyền user_id → xem toàn bộ
       status,
       startDate,
       endDate,
       userKeyword, // 🔹 có thể truyền hoặc không (tìm theo tên / sđt / id)
-      sort
+      sort,
+      pageNum,
+      limitNum
     );
 
-    res.json(reservations);
+    res.json(result);
   } catch (error) {
     console.error("❌ Error:", error);
     res.status(500).json({ message: error.message });
@@ -169,23 +174,90 @@ const cancelReservation = async (req, res) => {
         .status(403)
         .json({ message: "Unauthorized: You cannot cancel this reservation" });
 
-    // 2️⃣ Cập nhật phiếu -> cancelled
-    await Reservation.updateReservationStatus(id, "cancelled");
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    // 3️⃣ Hủy tất cả chi tiết giữ + cập nhật record → available
-    await pool.query(
-      `
-      UPDATE reservation_details rd
-      JOIN records r ON rd.record_id = r.id
-      SET rd.status = 'cancelled', r.status = 'available'
-      WHERE rd.reservation_id = ? AND rd.status IN ('pending','on_hold')
-      `,
-      [id]
-    );
+      // 2️⃣ Hủy tất cả chi tiết giữ + cập nhật record → available
+      await conn.query(
+        `
+        UPDATE reservation_details rd
+        JOIN records r ON rd.record_id = r.id
+        SET rd.status = 'cancelled', r.status = 'available'
+        WHERE rd.reservation_id = ? AND rd.status IN ('pending','on_hold')
+        `,
+        [id]
+      );
 
-    res.json({ message: "Reservation cancelled successfully" });
+      // 3️⃣ Cập nhật phiếu → closed (vì không còn chi tiết pending/on_hold)
+      await conn.query(
+        `UPDATE reservation_tickets SET status = 'closed' WHERE id = ?`,
+        [id]
+      );
+
+      await conn.commit();
+      res.json({ message: "Reservation cancelled successfully" });
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
   } catch (error) {
     console.error("❌ Error in cancelReservation:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 📚 Thủ thư hủy phiếu giữ (không cần kiểm tra quyền sở hữu)
+const cancelReservationForLibrarian = async (req, res) => {
+  try {
+    const { id } = req.params; // reservation_id
+
+    // 1️⃣ Kiểm tra phiếu có tồn tại không
+    const reservation = await Reservation.getReservationById(id);
+    if (!reservation) {
+      return res.status(404).json({ message: "Reservation not found" });
+    }
+
+    // 2️⃣ Kiểm tra nếu phiếu đã bị đóng
+    if (reservation.ticket_status === "closed") {
+      return res.status(400).json({ 
+        message: "Reservation is already closed" 
+      });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 3️⃣ Hủy tất cả chi tiết giữ + cập nhật record → available
+      await conn.query(
+        `
+        UPDATE reservation_details rd
+        JOIN records r ON rd.record_id = r.id
+        SET rd.status = 'cancelled', r.status = 'available'
+        WHERE rd.reservation_id = ? AND rd.status IN ('pending','on_hold')
+        `,
+        [id]
+      );
+
+      // 4️⃣ Cập nhật phiếu → closed (vì không còn chi tiết pending/on_hold)
+      await conn.query(
+        `UPDATE reservation_tickets SET status = 'closed' WHERE id = ?`,
+        [id]
+      );
+
+      await conn.commit();
+      res.json({ message: "Reservation cancelled successfully" });
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  } catch (error) {
+    console.error("❌ Error in cancelReservationForLibrarian:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -200,6 +272,41 @@ const autoCancelPendingReservations = async (_req, res) => {
   }
 };
 
+// 📚 Get all reservation tickets for librarian (no pagination, returns all data)
+const getAllReservationsForLibrarian = async (req, res) => {
+  try {
+    const reservations = await Reservation.getAllReservationsForLibrarian();
+    res.json({
+      success: true,
+      count: reservations.length,
+      data: reservations,
+    });
+  } catch (error) {
+    console.error("❌ Error in getAllReservationsForLibrarian:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 📚 Get reservation details by ID for librarian
+const getReservationDetailsById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const details = await Reservation.getReservationWithDetailsById(id);
+    
+    if (!details || details.length === 0) {
+      return res.status(404).json({ message: "Reservation not found" });
+    }
+
+    res.json({
+      success: true,
+      data: details,
+    });
+  } catch (error) {
+    console.error("❌ Error in getReservationDetailsById:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createReservation,
   getUserHoldDetails,
@@ -209,5 +316,8 @@ module.exports = {
   updateReservationDetail,
   cancelReservationDetailReader,
   cancelReservation,
+  cancelReservationForLibrarian,
   autoCancelPendingReservations,
+  getAllReservationsForLibrarian,
+  getReservationDetailsById,
 };

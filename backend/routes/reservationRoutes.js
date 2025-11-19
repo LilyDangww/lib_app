@@ -175,7 +175,7 @@
  * @swagger
  * /reservations/librarian/list:
  *   get:
- *     summary: Thủ thư xem danh sách tất cả phiếu giữ
+ *     summary: Thủ thư xem danh sách tất cả phiếu giữ (có phân trang và lọc)
  *     tags: [Reservations]
  *     security:
  *       - bearerAuth: []
@@ -208,9 +208,89 @@
  *           type: string
  *           enum: [ASC, DESC]
  *         description: Thứ tự sắp xếp theo ngày tạo (mặc định DESC)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Số trang
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Số lượng bản ghi mỗi trang
  *     responses:
  *       200:
- *         description: Danh sách phiếu giữ cho thủ thư
+ *         description: Danh sách phiếu giữ cho thủ thư (có phân trang)
+ */
+
+/**
+ * @swagger
+ * /reservations/librarian/all:
+ *   get:
+ *     summary: Thủ thư xem tất cả phiếu giữ (không phân trang, trả về toàn bộ dữ liệu)
+ *     tags: [Reservations]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sách tất cả phiếu giữ với đầy đủ thông tin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 count:
+ *                   type: integer
+ *                   description: Tổng số phiếu giữ
+ *                   example: 25
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       reservation_id:
+ *                         type: integer
+ *                         example: 1
+ *                       user_id:
+ *                         type: integer
+ *                         example: 5
+ *                       user_name:
+ *                         type: string
+ *                         example: "Nguyễn Văn A"
+ *                       user_phone:
+ *                         type: string
+ *                         example: "0123456789"
+ *                       user_email:
+ *                         type: string
+ *                         example: "user@example.com"
+ *                       hold_type:
+ *                         type: string
+ *                         example: "hard"
+ *                       ticket_status:
+ *                         type: string
+ *                         example: "active"
+ *                       request_date:
+ *                         type: string
+ *                         format: date-time
+ *                       note:
+ *                         type: string
+ *                       detail_id:
+ *                         type: integer
+ *                         example: 101
+ *                       detail_status:
+ *                         type: string
+ *                         example: "on_hold"
+ *                       hold_start_at:
+ *                         type: string
+ *                         format: date-time
+ *                       default_expire_at:
+ *                         type: string
+ *                         format: date-time
  */
 
 /**
@@ -365,7 +445,10 @@ const {
   updateReservationDetail, // Librarian: cập nhật chi tiết giữ theo barcode
   cancelReservationDetailReader, // Reader: hủy chi tiết giữ
   cancelReservation, // User & Librarian: hủy phiếu giữ
+  cancelReservationForLibrarian, // Librarian: hủy phiếu giữ (không cần kiểm tra quyền)
   autoCancelPendingReservations, // Librarian: tự động hủy phiếu giữ pending > 5 ngày
+  getAllReservationsForLibrarian, // Librarian: lấy tất cả phiếu giữ (không phân trang)
+  getReservationDetailsById, // Librarian: lấy chi tiết phiếu giữ theo ID
 } = require("../controllers/reservationController");
 
 // ================== USER ================== //
@@ -387,12 +470,28 @@ router.patch(
 router.delete("/:id", authToken, cancelReservation);
 
 // ================== LIBRARIAN ================== //
-// 📚 Thủ thư xem danh sách toàn bộ phiếu giữ
+// 📚 Thủ thư xem danh sách toàn bộ phiếu giữ (có phân trang và lọc)
 router.get(
   "/librarian/list",
   authToken,
   permission.isLibrarian,
   getReservationsForLibrarian
+);
+
+// 📚 Thủ thư xem tất cả phiếu giữ (không phân trang, trả về toàn bộ dữ liệu)
+router.get(
+  "/librarian/all",
+  authToken,
+  permission.isLibrarian,
+  getAllReservationsForLibrarian
+);
+
+// 📚 Thủ thư xem chi tiết phiếu giữ theo ID
+router.get(
+  "/librarian/:id/details",
+  authToken,
+  permission.isLibrarian,
+  getReservationDetailsById
 );
 
 // 📚 Thủ thư xem phiếu giữ của 1 bạn đọc cụ thể
@@ -417,6 +516,14 @@ router.patch(
   authToken,
   permission.isLibrarian,
   updateReservationDetail
+);
+
+// Thủ thư hủy phiếu giữ
+router.delete(
+  "/librarian/:id",
+  authToken,
+  permission.isLibrarian,
+  cancelReservationForLibrarian
 );
 
 router.post(

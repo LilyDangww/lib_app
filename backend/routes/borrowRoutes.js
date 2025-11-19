@@ -298,6 +298,7 @@ const {
   createBorrow,
   getMyBorrows,
   getAllBorrows,
+  getBorrowById,
   returnBook,
   updateBorrowStatus,
   autoUpdateOverdue,
@@ -312,16 +313,19 @@ router.get("/me", authToken, getMyBorrows);
 // Thủ thư xem tất cả phiếu mượn
 router.get("/", authToken, permission.isLibrarian, getAllBorrows);
 
-// Trả sách (đã đăng nhập)
+// Trả sách (đã đăng nhập) - Must be before /:id
 router.patch("/details/:detailId/return", authToken, returnBook);
 
-// Cập nhật trạng thái phiếu mượn (thủ thư)
+// Cập nhật trạng thái phiếu mượn (thủ thư) - Must be before /:id
 router.put(
   "/:id/status",
   authToken,
   permission.isLibrarian,
   updateBorrowStatus
 );
+
+// Xem chi tiết phiếu mượn (thủ thư) - Must be after more specific routes
+router.get("/:id", authToken, permission.isLibrarian, getBorrowById);
 
 // Chạy quá hạn (thủ thư)
 router.post(
