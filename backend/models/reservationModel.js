@@ -501,6 +501,7 @@ const autoCancelPendingReservations = async () => {
 };
 
 // 📚 Get all reservation tickets for librarian (no pagination, returns all data)
+// Returns ticket-level data only, not details
 const getAllReservationsForLibrarian = async () => {
   const query = `
     SELECT 
@@ -509,18 +510,24 @@ const getAllReservationsForLibrarian = async () => {
       u.username AS user_name,
       u.phone AS user_phone,
       u.email AS user_email,
-      rt.hold_type,
       rt.status AS ticket_status,
       rt.request_date,
       rt.note,
-      rd.id AS detail_id,
-      rd.status AS detail_status,
-      rd.hold_start_at,
-      rd.default_expire_at
+      COUNT(rd.id) AS total_details,
+      SUM(CASE WHEN rd.status IN ('pending', 'on_hold') THEN 1 ELSE 0 END) AS active_details
     FROM reservation_tickets rt
     JOIN users u ON rt.user_id = u.id
-    JOIN reservation_details rd ON rt.id = rd.reservation_id
-    ORDER BY rt.request_date DESC
+    LEFT JOIN reservation_details rd ON rt.id = rd.reservation_id
+    GROUP BY rt.id, rt.user_id, u.username, u.phone, u.email, rt.status, rt.request_date, rt.note
+    ORDER BY 
+      CASE rt.status
+        WHEN 'active' THEN 1
+        WHEN 'processing' THEN 2
+        WHEN 'closed' THEN 3
+        WHEN 'cancelled' THEN 4
+        ELSE 5
+      END,
+      rt.request_date DESC
   `;
 
   const [rows] = await pool.query(query);
