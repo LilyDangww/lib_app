@@ -108,68 +108,32 @@ module.exports = {
   },
 
   // ============================
-  // LƯỢT MƯỢN / TRẢ THEO THỜI GIAN (ví dụ 7 ngày gần nhất)
+  // LƯỢT MƯỢN / TRẢ THEO THỜI GIAN (theo SÁCH, TRONG THÁNG HIỆN TẠI)
   // ============================
-  getBorrowReturnChart: async () => {
-    const [rows] = await pool.query(`
-      SELECT 
-        DATE(bt.borrow_date) AS date,
-        COUNT(*) AS borrow_count,
-        SUM(CASE WHEN bt.return_date IS NOT NULL THEN 1 ELSE 0 END) AS return_count
-      FROM borrow_tickets bt
-      WHERE bt.borrow_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-      GROUP BY DATE(bt.borrow_date)
-      ORDER BY date ASC
-    `);
-    return rows; // [{ date, borrow_count, return_count }, ...]
-  },
-
-  // ============================
-  // LƯỢT MƯỢN / TRẢ THEO THỜI GIAN (theo SÁCH, trong khoảng ngày chọn)
-  // ============================
-  // fromDate, toDate dạng 'YYYY-MM-DD'. Nếu không truyền => mặc định 7 ngày gần nhất.
-  getBorrowReturnChart: async (fromDate, toDate) => {
-    // Nếu không truyền range -> dùng 7 ngày gần nhất
-    let whereBorrow = "";
-    let whereReturn = "";
-    const params = [];
-
-    if (fromDate && toDate) {
-      // Mượn: theo borrow_tickets.borrow_date
-      whereBorrow = "WHERE bt.borrow_date BETWEEN ? AND ?";
-      params.push(fromDate, toDate);
-
-      // Trả: theo borrow_details.updated_at (hoặc trả_date nếu bạn có cột riêng)
-      whereReturn =
-        "WHERE bd.status = 'returned' AND DATE(bd.updated_at) BETWEEN ? AND ?";
-      params.push(fromDate, toDate);
-    } else {
-      // Mặc định: 7 ngày gần nhất
-      whereBorrow =
-        "WHERE bt.borrow_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
-      whereReturn =
-        "WHERE bd.status = 'returned' AND bd.updated_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
-    }
-
+  getBorrowReturnChartCurrentMonth: async () => {
+    // Từ ngày đầu tháng hiện tại đến hôm nay
     const [rows] = await pool.query(
       `
-      /* Bảng ngày mượn theo sách */
+      /* ngày mượn theo SÁCH trong tháng hiện tại */
       WITH borrow_days AS (
         SELECT 
           DATE(bt.borrow_date) AS date,
           COUNT(bd.id) AS borrow_count
         FROM borrow_tickets bt
         JOIN borrow_details bd ON bt.id = bd.borrow_id
-        ${whereBorrow}
+        WHERE bt.borrow_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          AND bt.borrow_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
         GROUP BY DATE(bt.borrow_date)
       ),
-      /* Bảng ngày trả theo sách (status = returned) */
+      /* ngày trả theo SÁCH (status = returned) trong tháng hiện tại */
       return_days AS (
         SELECT 
           DATE(bd.updated_at) AS date,
           COUNT(bd.id) AS return_count
         FROM borrow_details bd
-        ${whereReturn}
+        WHERE bd.status = 'returned'
+          AND bd.updated_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          AND bd.updated_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
         GROUP BY DATE(bd.updated_at)
       )
       SELECT 
@@ -184,10 +148,9 @@ module.exports = {
       LEFT JOIN borrow_days b ON d.date = b.date
       LEFT JOIN return_days r ON d.date = r.date
       ORDER BY d.date ASC
-      `,
-      params
+      `
     );
 
-    return rows; // [{ date, borrow_count, return_count }, ...]
+    return rows; // [{ date: '2025-03-01', borrow_count: 3, return_count: 1 }, ...]
   },
 };
