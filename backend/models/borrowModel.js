@@ -167,14 +167,15 @@ const createBorrow = async (user_id, records) => {
 
 // ============ READ ============
 // Danh sách phiếu mượn
-const getBorrows = async (fromDate, toDate, page = 1, limit = 10) => {
+const getBorrows = async (fromDate, toDate, page = 1, limit = 10, status = null) => {
   const offset = (page - 1) * limit;
   
   // Count total records
   let countQuery = `
-    SELECT COUNT(*) as total
+    SELECT COUNT(DISTINCT b.id) as total
     FROM borrow_tickets b
     JOIN users u ON b.user_id = u.id
+    LEFT JOIN borrow_details bd ON b.id = bd.borrow_id
     WHERE 1=1
   `;
   const countParams = [];
@@ -187,15 +188,43 @@ const getBorrows = async (fromDate, toDate, page = 1, limit = 10) => {
     countParams.push(toDate);
   }
   
+  // Filter by status
+  if (status === "active") {
+    countQuery += ` AND b.status = 'active'`;
+  } else if (status === "closed") {
+    countQuery += ` AND b.status = 'closed'`;
+  } else if (status === "expired") {
+    // A borrow ticket is expired if it has at least one expired detail OR on_loan detail past due_date
+    countQuery += ` AND EXISTS (
+      SELECT 1 FROM borrow_details bd2 
+      WHERE bd2.borrow_id = b.id 
+      AND (bd2.status = 'expired' OR (bd2.status = 'on_loan' AND b.due_date < CURDATE()))
+    )`;
+  }
+  
   const [countResult] = await pool.query(countQuery, countParams);
   const total = countResult[0].total;
   const totalPages = Math.ceil(total / limit);
 
-  // Get paginated data
+  // Get paginated data with expiration check
   let query = `
-    SELECT b.id, u.username as user_name, b.borrow_date, b.due_date, b.status
+    SELECT DISTINCT 
+      b.id, 
+      u.username as user_name, 
+      b.borrow_date, 
+      b.due_date, 
+      b.status,
+      CASE 
+        WHEN EXISTS (
+          SELECT 1 FROM borrow_details bd_check 
+          WHERE bd_check.borrow_id = b.id 
+          AND (bd_check.status = 'expired' OR (bd_check.status = 'on_loan' AND b.due_date < CURDATE()))
+        ) THEN 1 
+        ELSE 0 
+      END as is_expired
     FROM borrow_tickets b
     JOIN users u ON b.user_id = u.id
+    LEFT JOIN borrow_details bd ON b.id = bd.borrow_id
     WHERE 1=1
   `;
   const params = [];
@@ -207,11 +236,33 @@ const getBorrows = async (fromDate, toDate, page = 1, limit = 10) => {
     query += ` AND b.borrow_date <= ?`;
     params.push(toDate);
   }
+  
+  // Filter by status
+  if (status === "active") {
+    query += ` AND b.status = 'active'`;
+  } else if (status === "closed") {
+    query += ` AND b.status = 'closed'`;
+  } else if (status === "expired") {
+    // A borrow ticket is expired if it has at least one expired detail OR on_loan detail past due_date
+    query += ` AND EXISTS (
+      SELECT 1 FROM borrow_details bd2 
+      WHERE bd2.borrow_id = b.id 
+      AND (bd2.status = 'expired' OR (bd2.status = 'on_loan' AND b.due_date < CURDATE()))
+    )`;
+  }
+  
   query += ` ORDER BY b.borrow_date DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   const [rows] = await pool.query(query, params);
-  return { page, limit, total, totalPages, data: rows };
+  
+  // Convert is_expired from 0/1 to boolean
+  const data = rows.map(row => ({
+    ...row,
+    is_expired: Boolean(row.is_expired)
+  }));
+  
+  return { page, limit, total, totalPages, data };
 };
 
 // Lấy chi tiết phiếu mượn (reader hoặc librarian)

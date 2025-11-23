@@ -57,11 +57,15 @@ const getMyBorrows = async (req, res) => {
 // ================== Lấy tất cả phiếu mượn cho thủ thư ==================
 const getAllBorrows = async (req, res) => {
   try {
-    const { fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { fromDate, toDate, page = 1, limit = 10, status } = req.query;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
     
-    const result = await Borrow.getBorrows(fromDate, toDate, pageNum, limitNum);
+    // Validate status filter
+    const validStatuses = ["active", "closed", "expired"];
+    const statusFilter = status && validStatuses.includes(status) ? status : null;
+    
+    const result = await Borrow.getBorrows(fromDate, toDate, pageNum, limitNum, statusFilter);
 
     const mapped = result.data.map((r) => ({
       ...r,

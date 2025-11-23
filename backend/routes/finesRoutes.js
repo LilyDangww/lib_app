@@ -263,19 +263,35 @@ const express = require("express");
 const router = express.Router();
 const {
   createFineFromLoanItem,
+  createFineFromMultipleLoanItems,
   createFineDirect,
   getFine,
+  getAllFines,
+  updateFineStatus,
+  deleteFine,
 } = require("../controllers/finesController");
 const authToken = require("../middleware/authToken");
 const permission = require("../helpers/permission");
 
-// Thủ thư tạo phiếu phạt từ loan_item
+// Thủ thư tạo phiếu phạt từ loan_item (single)
 router.post("/", authToken, permission.isLibrarian, createFineFromLoanItem);
+
+// Thủ thư tạo phiếu phạt từ nhiều loan_items (multiple books)
+router.post("/bulk", authToken, permission.isLibrarian, createFineFromMultipleLoanItems);
 
 // Thủ thư tạo phiếu phạt trực tiếp với user_id, record_id, reason, amount
 router.post("/direct", authToken, permission.isLibrarian, createFineDirect);
 
-// Xem phiếu phạt chi tiết
+// Lấy danh sách phiếu phạt (must be before /:id route)
+router.get("/", authToken, permission.isLibrarian, getAllFines);
+
+// Cập nhật trạng thái phiếu phạt (confirm payment) - must be before /:id route
+router.put("/:id/status", authToken, permission.isLibrarian, updateFineStatus);
+
+// Xóa phiếu phạt - must be before /:id route
+router.delete("/:id", authToken, permission.isLibrarian, deleteFine);
+
+// Xem phiếu phạt chi tiết (must be last)
 router.get("/:id", authToken, getFine);
 
 module.exports = router;
