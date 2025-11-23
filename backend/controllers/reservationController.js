@@ -108,13 +108,15 @@ const confirmReservation = async (req, res) => {
 const updateReservationDetail = async (req, res) => {
   try {
     const { detail_id } = req.params; // FE truyền id chi tiết
-    const { status } = req.body; // picked_up, cancelled, expired, ...
+    const { status, reason } = req.body; // picked_up, cancelled, expired, ... và reason (optional)
 
     if (!status) {
       return res.status(400).json({ message: "Missing status" });
     }
 
-    const ok = await Reservation.updateReservationDetailById(detail_id, status);
+    // Nếu là cancelled và có reason, truyền reason vào
+    const cancelReason = (status === "cancelled" && reason) ? reason : null;
+    const ok = await Reservation.updateReservationDetailById(detail_id, status, cancelReason);
 
     if (!ok) {
       return res.status(404).json({ message: "Reservation detail not found" });
@@ -123,6 +125,43 @@ const updateReservationDetail = async (req, res) => {
     res.json({ message: `Reservation detail updated to ${status}` });
   } catch (error) {
     console.error("❌ Error in updateReservationDetail:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 📚 Thủ thư hủy một chi tiết giữ (theo detail_id)
+const cancelReservationDetailForLibrarian = async (req, res) => {
+  try {
+    const { detail_id } = req.params;
+    const { reason } = req.body; // Lý do hủy (required)
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "Reason is required" });
+    }
+
+    // Lấy thông tin chi tiết để kiểm tra
+    const detail = await Reservation.getReservationDetailBasicById(detail_id);
+    if (!detail) {
+      return res.status(404).json({ message: "Reservation detail not found" });
+    }
+
+    // Kiểm tra trạng thái hợp lệ
+    if (!["pending", "on_hold"].includes(detail.detail_status)) {
+      return res.status(400).json({ 
+        message: "Cannot cancel detail at this stage. Only pending or on_hold details can be cancelled." 
+      });
+    }
+
+    // Hủy chi tiết với lý do
+    const ok = await Reservation.updateReservationDetailById(detail_id, "cancelled", reason.trim());
+
+    if (!ok) {
+      return res.status(404).json({ message: "Reservation detail not found" });
+    }
+
+    res.json({ message: "Reservation detail cancelled successfully" });
+  } catch (error) {
+    console.error("❌ Error in cancelReservationDetailForLibrarian:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -213,6 +252,7 @@ const cancelReservation = async (req, res) => {
 const cancelReservationForLibrarian = async (req, res) => {
   try {
     const { id } = req.params; // reservation_id
+    const { reason } = req.body; // Lý do hủy (optional)
 
     // 1️⃣ Kiểm tra phiếu có tồn tại không
     const reservation = await Reservation.getReservationById(id);
@@ -231,18 +271,18 @@ const cancelReservationForLibrarian = async (req, res) => {
     try {
       await conn.beginTransaction();
 
-      // 3️⃣ Hủy tất cả chi tiết giữ + cập nhật record → available
+      // 3️⃣ Hủy tất cả chi tiết giữ + cập nhật record → available và lưu lý do hủy
       await conn.query(
         `
         UPDATE reservation_details rd
         JOIN records r ON rd.record_id = r.id
-        SET rd.status = 'cancelled', r.status = 'available'
+        SET rd.status = 'cancelled', r.status = 'available', rd.cancel_reason = ?
         WHERE rd.reservation_id = ? AND rd.status IN ('pending','on_hold')
         `,
-        [id]
+        [reason || null, id]
       );
 
-      // 4️⃣ Cập nhật phiếu → closed (vì không còn chi tiết pending/on_hold)
+      // 4️⃣ Cập nhật phiếu → closed
       await conn.query(
         `UPDATE reservation_tickets SET status = 'closed' WHERE id = ?`,
         [id]
@@ -317,6 +357,7 @@ module.exports = {
   cancelReservationDetailReader,
   cancelReservation,
   cancelReservationForLibrarian,
+  cancelReservationDetailForLibrarian,
   autoCancelPendingReservations,
   getAllReservationsForLibrarian,
   getReservationDetailsById,

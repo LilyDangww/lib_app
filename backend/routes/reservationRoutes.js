@@ -446,6 +446,7 @@ const {
   cancelReservationDetailReader, // Reader: hủy chi tiết giữ
   cancelReservation, // User & Librarian: hủy phiếu giữ
   cancelReservationForLibrarian, // Librarian: hủy phiếu giữ (không cần kiểm tra quyền)
+  cancelReservationDetailForLibrarian, // Librarian: hủy một chi tiết giữ với lý do
   autoCancelPendingReservations, // Librarian: tự động hủy phiếu giữ pending > 5 ngày
   getAllReservationsForLibrarian, // Librarian: lấy tất cả phiếu giữ (không phân trang)
   getReservationDetailsById, // Librarian: lấy chi tiết phiếu giữ theo ID
@@ -516,6 +517,14 @@ router.patch(
   authToken,
   permission.isLibrarian,
   updateReservationDetail
+);
+
+// Thủ thư hủy một chi tiết giữ theo detail_id
+router.patch(
+  "/librarian/detail/:detail_id/cancel",
+  authToken,
+  permission.isLibrarian,
+  cancelReservationDetailForLibrarian
 );
 
 // Thủ thư hủy phiếu giữ

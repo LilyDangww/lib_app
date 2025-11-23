@@ -33,7 +33,9 @@ const createRecord = async (
 const getRecords = async (filters = {}) => {
   let query = `
     SELECT r.id, r.barcode, 
-           d.name AS document_name, 
+           r.doc_id AS document_id,
+           d.name AS document_name,
+           d.image_url AS document_image_url,
            l.location AS location_name,
            r.status, 
            r.condition_note,
@@ -66,8 +68,10 @@ const getRecords = async (filters = {}) => {
 // Lấy chi tiết một bản ghi theo id
 const getRecordById = async (id) => {
   const [rows] = await pool.query(
-    `SELECT r.id, r.barcode, 
-            d.name AS document_name, 
+    `SELECT r.id, r.barcode,
+            r.doc_id AS document_id,
+            d.name AS document_name,
+            d.image_url AS document_image_url,
             l.location AS location_name,
             r.status, 
             r.condition_note,

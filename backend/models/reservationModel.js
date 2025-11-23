@@ -97,7 +97,7 @@ const getReservationWithDetailsById = async (id) => {
         u.username AS user_name,
         rt.status AS ticket_status,
         rt.request_date,
-        rt.note, 
+        rt.note,
         rd.id AS detail_id,
         rd.record_id,
         r.barcode,
@@ -105,7 +105,8 @@ const getReservationWithDetailsById = async (id) => {
         d.image_url AS image_url,
         rd.status AS detail_status,
         rd.hold_start_at,
-        rd.default_expire_at
+        rd.default_expire_at,
+        rd.cancel_reason
      FROM reservation_tickets rt
      JOIN users u ON rt.user_id = u.id  
      JOIN reservation_details rd ON rt.id = rd.reservation_id
@@ -183,7 +184,7 @@ const confirmReservationDetails = async (reservation_id) => {
   }
 };
 
-const updateReservationDetailById = async (detail_id, newStatus) => {
+const updateReservationDetailById = async (detail_id, newStatus, cancelReason = null) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -217,9 +218,10 @@ const updateReservationDetailById = async (detail_id, newStatus) => {
         `UPDATE reservation_details rd
          JOIN records r ON rd.record_id = r.id
          SET rd.status = ?,
-             r.status = 'available'
+             r.status = 'available',
+             rd.cancel_reason = ?
          WHERE rd.id = ?`,
-        [newStatus, detail_id]
+        [newStatus, cancelReason, detail_id]
       );
     }
 
@@ -521,8 +523,8 @@ const getAllReservationsForLibrarian = async () => {
     GROUP BY rt.id, rt.user_id, u.username, u.phone, u.email, rt.status, rt.request_date, rt.note
     ORDER BY 
       CASE rt.status
-        WHEN 'active' THEN 1
-        WHEN 'processing' THEN 2
+        WHEN 'processing' THEN 1
+        WHEN 'active' THEN 2
         WHEN 'closed' THEN 3
         WHEN 'cancelled' THEN 4
         ELSE 5

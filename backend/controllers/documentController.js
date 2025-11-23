@@ -324,6 +324,21 @@ const getDocumentRecords = async (req, res) => {
   }
 };
 
+//===========================================================================================
+// Lấy tóm tắt thống kê cho tất cả sách
+const getBookSummary = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const summary = await Document.getBookSummary(page, limit);
+    res.json(summary);
+  } catch (error) {
+    console.error("Error fetching book summary:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -335,4 +350,5 @@ module.exports = {
   getCategories,
   getPublishers,
   getDocumentRecords,
+  getBookSummary,
 };

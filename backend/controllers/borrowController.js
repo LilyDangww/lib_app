@@ -136,6 +136,34 @@ const updateBorrowStatus = async (req, res) => {
   }
 };
 
+// ================== Lấy tóm tắt thống kê mượn ==================
+const getBorrowSummary = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const summary = await Borrow.getBorrowSummary(page, limit);
+    res.json(summary);
+  } catch (error) {
+    console.error("Error fetching borrow summary:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// ================== Lấy tóm tắt thống kê mượn theo sách ==================
+const getBorrowSummaryByBook = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const summary = await Borrow.getBorrowSummaryByBook(page, limit);
+    res.json(summary);
+  } catch (error) {
+    console.error("Error fetching borrow summary by book:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   createBorrow,
   getMyBorrows,
@@ -144,4 +172,6 @@ module.exports = {
   returnBook,
   updateBorrowStatus,
   autoUpdateOverdue,
+  getBorrowSummary,
+  getBorrowSummaryByBook,
 };

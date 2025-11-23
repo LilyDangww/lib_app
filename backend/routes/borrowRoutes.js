@@ -302,6 +302,8 @@ const {
   returnBook,
   updateBorrowStatus,
   autoUpdateOverdue,
+  getBorrowSummary,
+  getBorrowSummaryByBook,
 } = require("../controllers/borrowController");
 
 // Tạo phiếu mượn (thủ thư)
@@ -312,6 +314,22 @@ router.get("/me", authToken, getMyBorrows);
 
 // Thủ thư xem tất cả phiếu mượn
 router.get("/", authToken, permission.isLibrarian, getAllBorrows);
+
+// Tóm tắt thống kê mượn (thủ thư) - Must be before /:id
+router.get(
+  "/summary",
+  authToken,
+  permission.isLibrarian,
+  getBorrowSummary
+);
+
+// Tóm tắt thống kê mượn theo sách (thủ thư) - Must be before /:id
+router.get(
+  "/summary/by-book",
+  authToken,
+  permission.isLibrarian,
+  getBorrowSummaryByBook
+);
 
 // Trả sách (đã đăng nhập) - Must be before /:id
 router.patch("/details/:detailId/return", authToken, returnBook);

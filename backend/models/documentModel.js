@@ -574,6 +574,68 @@ const importDocumentsFromFile = async (filePath) => {
   return summary;
 };
 
+//===========================================================================================
+// Lấy tóm tắt thống kê cho tất cả sách
+const getBookSummary = async (page, limit) => {
+  const offset = (page - 1) * limit;
+
+  // Đếm tổng số sách
+  const [countResult] = await pool.query(
+    `
+    SELECT COUNT(DISTINCT d.id) as total
+    FROM documents d
+    WHERE d.is_active = 1
+    `
+  );
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+
+  // Lấy dữ liệu với pagination
+  const [rows] = await pool.query(
+    `
+    SELECT 
+      d.id,
+      d.name,
+      d.category_id,
+      c.category_name AS category,
+      COUNT(DISTINCT r.id) AS total_records,
+      COUNT(DISTINCT CASE WHEN r.status = 'available' THEN r.id END) AS available_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'on_loan' THEN r.id END) AS borrowed_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'damaged' THEN r.id END) AS damaged_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'lost' THEN r.id END) AS lost_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'reserved_pending' THEN r.id END) AS reserved_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'processing' THEN r.id END) AS processing_count
+    FROM documents d
+    LEFT JOIN categories c ON d.category_id = c.id
+    LEFT JOIN records r ON d.id = r.doc_id
+    WHERE d.is_active = 1
+    GROUP BY d.id, d.name, d.category_id, c.category_name
+    ORDER BY d.id ASC, d.name ASC
+    LIMIT ${limit} OFFSET ${offset}
+    `
+  );
+
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    data: rows.map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      category_id: row.category_id ? Number(row.category_id) : null,
+      category: row.category || null,
+      total_records: Number(row.total_records || 0),
+      available_count: Number(row.available_count || 0),
+      borrowed_count: Number(row.borrowed_count || 0),
+      damaged_count: Number(row.damaged_count || 0),
+      lost_count: Number(row.lost_count || 0),
+      reserved_count: Number(row.reserved_count || 0),
+      processing_count: Number(row.processing_count || 0),
+    })),
+  };
+};
+
 module.exports = {
   addDocument,
   getDocumentsForReaders,
@@ -584,4 +646,5 @@ module.exports = {
   importDocumentsFromFile, // added
   getCategories,
   getPublishers,
+  getBookSummary,
 };

@@ -438,6 +438,136 @@ const closeBorrow = async (id) => {
   ]);
 };
 
+// ============ SUMMARY ============
+// Lấy tóm tắt thống kê mượn theo user
+const getBorrowSummary = async (page, limit) => {
+  const offset = (page - 1) * limit;
+
+  // Đếm tổng số user có phiếu mượn
+  const [countResult] = await pool.query(
+    `
+    SELECT COUNT(DISTINCT u.id) as total
+    FROM users u
+    INNER JOIN borrow_tickets b ON u.id = b.user_id
+    `
+  );
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+
+  // Lấy dữ liệu với pagination
+  const [rows] = await pool.query(
+    `
+    SELECT 
+      u.id as user_id,
+      u.username as user_name,
+      COUNT(DISTINCT b.id) AS total_tickets,
+      COUNT(DISTINCT CASE WHEN b.status = 'active' THEN b.id END) AS active_tickets,
+      COUNT(DISTINCT CASE WHEN b.status = 'closed' THEN b.id END) AS closed_tickets,
+      COUNT(DISTINCT bd.id) AS total_borrowed_books,
+      COUNT(DISTINCT CASE WHEN bd.status = 'on_loan' THEN bd.id END) AS on_loan_count,
+      COUNT(DISTINCT CASE WHEN bd.status = 'returned' THEN bd.id END) AS returned_count,
+      COUNT(DISTINCT CASE WHEN bd.status = 'expired' THEN bd.id END) AS expired_count,
+      COUNT(DISTINCT CASE WHEN bd.status = 'lost' THEN bd.id END) AS lost_count,
+      COUNT(DISTINCT CASE WHEN b.due_date < CURDATE() AND bd.status = 'on_loan' THEN bd.id END) AS overdue_count
+    FROM users u
+    INNER JOIN borrow_tickets b ON u.id = b.user_id
+    LEFT JOIN borrow_details bd ON b.id = bd.borrow_id
+    GROUP BY u.id, u.username
+    ORDER BY u.id ASC, u.username ASC
+    LIMIT ? OFFSET ?
+    `,
+    [limit, offset]
+  );
+
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    data: rows.map((row) => ({
+      user_id: Number(row.user_id),
+      user_name: row.user_name,
+      total_tickets: Number(row.total_tickets || 0),
+      active_tickets: Number(row.active_tickets || 0),
+      closed_tickets: Number(row.closed_tickets || 0),
+      total_borrowed_books: Number(row.total_borrowed_books || 0),
+      on_loan_count: Number(row.on_loan_count || 0),
+      returned_count: Number(row.returned_count || 0),
+      expired_count: Number(row.expired_count || 0),
+      lost_count: Number(row.lost_count || 0),
+      overdue_count: Number(row.overdue_count || 0),
+    })),
+  };
+};
+
+// Lấy tóm tắt thống kê mượn theo sách
+const getBorrowSummaryByBook = async (page, limit) => {
+  const offset = (page - 1) * limit;
+
+  // Đếm tổng số sách có được mượn
+  const [countResult] = await pool.query(
+    `
+    SELECT COUNT(DISTINCT d.id) as total
+    FROM documents d
+    INNER JOIN records r ON d.id = r.doc_id
+    INNER JOIN borrow_details bd ON r.id = bd.record_id
+    WHERE d.is_active = 1
+    `
+  );
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+
+  // Lấy dữ liệu với pagination
+  const [rows] = await pool.query(
+    `
+    SELECT 
+      d.id as book_id,
+      d.name as book_name,
+      d.category_id,
+      c.category_name AS category,
+      COUNT(DISTINCT bd.id) AS total_borrowed_times,
+      COUNT(DISTINCT CASE WHEN bd.status = 'on_loan' THEN bd.id END) AS on_loan_count,
+      COUNT(DISTINCT CASE WHEN bd.status = 'returned' THEN bd.id END) AS returned_count,
+      COUNT(DISTINCT CASE WHEN bd.status = 'expired' THEN bd.id END) AS expired_count,
+      COUNT(DISTINCT CASE WHEN bd.status = 'lost' THEN bd.id END) AS lost_count,
+      COUNT(DISTINCT CASE WHEN b.due_date < CURDATE() AND bd.status = 'on_loan' THEN bd.id END) AS overdue_count,
+      COUNT(DISTINCT bd.borrow_id) AS total_borrow_tickets,
+      COUNT(DISTINCT CASE WHEN b.status = 'active' THEN b.id END) AS active_tickets
+    FROM documents d
+    INNER JOIN records r ON d.id = r.doc_id
+    INNER JOIN borrow_details bd ON r.id = bd.record_id
+    INNER JOIN borrow_tickets b ON bd.borrow_id = b.id
+    LEFT JOIN categories c ON d.category_id = c.id
+    WHERE d.is_active = 1
+    GROUP BY d.id, d.name, d.category_id, c.category_name
+    ORDER BY d.id ASC, d.name ASC
+    LIMIT ? OFFSET ?
+    `,
+    [limit, offset]
+  );
+
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    data: rows.map((row) => ({
+      book_id: Number(row.book_id),
+      book_name: row.book_name,
+      category_id: row.category_id ? Number(row.category_id) : null,
+      category: row.category || null,
+      total_borrowed_times: Number(row.total_borrowed_times || 0),
+      on_loan_count: Number(row.on_loan_count || 0),
+      returned_count: Number(row.returned_count || 0),
+      expired_count: Number(row.expired_count || 0),
+      lost_count: Number(row.lost_count || 0),
+      overdue_count: Number(row.overdue_count || 0),
+      total_borrow_tickets: Number(row.total_borrow_tickets || 0),
+      active_tickets: Number(row.active_tickets || 0),
+    })),
+  };
+};
+
 module.exports = {
   createBorrow,
   getBorrows,
@@ -448,4 +578,6 @@ module.exports = {
   updateBorrowTicketStatus,
   returnBook,
   getBorrowsByUser,
+  getBorrowSummary,
+  getBorrowSummaryByBook,
 };

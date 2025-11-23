@@ -282,6 +282,7 @@ const {
   getCategories,
   getPublishers,
   getDocumentRecords,
+  getBookSummary,
 } = require("../controllers/documentController");
 
 // LIST routes (cụ thể) luôn trước route động :id
@@ -290,6 +291,12 @@ router.get(
   authToken,
   permission.isLibrarian,
   getDocumentsForLibrarians
+);
+router.get(
+  "/summary",
+  authToken,
+  permission.isLibrarian,
+  getBookSummary
 );
 router.get("/", getDocumentsForReaders);
 router.get("/readers", getDocumentsForReaders); // giữ lộ trình cũ để tránh phá vỡ client đang dùng

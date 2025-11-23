@@ -263,6 +263,7 @@ const express = require("express");
 const router = express.Router();
 const {
   createFineFromLoanItem,
+  createFineDirect,
   getFine,
 } = require("../controllers/finesController");
 const authToken = require("../middleware/authToken");
@@ -270,6 +271,9 @@ const permission = require("../helpers/permission");
 
 // Thủ thư tạo phiếu phạt từ loan_item
 router.post("/", authToken, permission.isLibrarian, createFineFromLoanItem);
+
+// Thủ thư tạo phiếu phạt trực tiếp với user_id, record_id, reason, amount
+router.post("/direct", authToken, permission.isLibrarian, createFineDirect);
 
 // Xem phiếu phạt chi tiết
 router.get("/:id", authToken, getFine);
