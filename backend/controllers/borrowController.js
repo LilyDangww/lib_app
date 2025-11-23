@@ -90,6 +90,21 @@ const returnBook = async (req, res) => {
   }
 };
 
+// Librarian trả tất cả sách trong phiếu mượn
+const returnAllBooks = async (req, res) => {
+  try {
+    const { id } = req.params; // borrow_id
+    const result = await Borrow.returnAllBooks(id);
+    await Borrow.updateBorrowTicketStatus(result.borrowId);
+    res.json({ 
+      message: `Trả thành công ${result.totalReturned} quyển sách`, 
+      ...result 
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 // Cron: quá hạn chi tiết mượn
 const autoUpdateOverdue = async (_req, res) => {
   try {
@@ -170,6 +185,7 @@ module.exports = {
   getAllBorrows,
   getBorrowById,
   returnBook,
+  returnAllBooks,
   updateBorrowStatus,
   autoUpdateOverdue,
   getBorrowSummary,

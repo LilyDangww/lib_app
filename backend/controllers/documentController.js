@@ -339,6 +339,42 @@ const getBookSummary = async (req, res) => {
   }
 };
 
+//===========================================================================================
+// Thêm nhiều bản ghi cho nhiều sách (bulk create records)
+const addRecordsBulk = async (req, res) => {
+  try {
+    const { records } = req.body;
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        message: "Records array is required and must not be empty",
+      });
+    }
+
+    // Validate each record
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      if (!record.doc_id || !record.barcode) {
+        return res.status(400).json({
+          message: `Record at index ${i} is missing required fields: doc_id and barcode are required`,
+        });
+      }
+    }
+
+    // Import Record model
+    const Record = require("../models/recordModel");
+    const result = await Record.createRecordsBulk(records);
+
+    res.status(201).json({
+      message: `Successfully created ${result.success} record(s)${result.failed > 0 ? `, ${result.failed} failed` : ""}`,
+      ...result,
+    });
+  } catch (error) {
+    console.error("Error in addRecordsBulk:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -351,4 +387,5 @@ module.exports = {
   getPublishers,
   getDocumentRecords,
   getBookSummary,
+  addRecordsBulk,
 };

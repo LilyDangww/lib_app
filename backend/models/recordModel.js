@@ -29,6 +29,78 @@ const createRecord = async (
     condition_note,
   };
 };
+
+// Thêm nhiều bản ghi cùng lúc (bulk create)
+const createRecordsBulk = async (records) => {
+  if (!Array.isArray(records) || records.length === 0) {
+    throw new Error("Records array is required and must not be empty");
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const insertedRecords = [];
+    const errors = [];
+
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      const { doc_id, barcode, location_id, status, condition_note } = record;
+
+      if (!doc_id || !barcode) {
+        errors.push({
+          index: i,
+          record,
+          error: "doc_id và barcode là bắt buộc",
+        });
+        continue;
+      }
+
+      try {
+        const [result] = await conn.query(
+          `INSERT INTO records (doc_id, barcode, location_id, status, condition_note)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            doc_id,
+            barcode,
+            location_id || null,
+            status || "available",
+            condition_note || null,
+          ]
+        );
+
+        insertedRecords.push({
+          id: result.insertId,
+          doc_id,
+          barcode,
+          location_id,
+          status: status || "available",
+          condition_note,
+        });
+      } catch (err) {
+        errors.push({
+          index: i,
+          record,
+          error: err.message,
+        });
+      }
+    }
+
+    await conn.commit();
+    return {
+      success: insertedRecords.length,
+      failed: errors.length,
+      records: insertedRecords,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
 // Lấy tất cả bản ghi (có thể filter theo doc_id và status)
 const getRecords = async (filters = {}) => {
   let query = `
@@ -166,6 +238,7 @@ const deleteRecord = async (id) => {
 
 module.exports = {
   createRecord,
+  createRecordsBulk,
   getRecords,
   getRecordById,
   updateRecord,

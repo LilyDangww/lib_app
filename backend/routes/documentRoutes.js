@@ -283,6 +283,7 @@ const {
   getPublishers,
   getDocumentRecords,
   getBookSummary,
+  addRecordsBulk,
 } = require("../controllers/documentController");
 
 // LIST routes (cụ thể) luôn trước route động :id
@@ -336,6 +337,14 @@ router.get(
   authToken,
   permission.isLibrarian,
   getPublishers
+);
+
+// Thêm nhiều bản ghi cho nhiều sách (phải đặt trước /:id)
+router.post(
+  "/records/bulk",
+  authToken,
+  permission.isLibrarian,
+  addRecordsBulk
 );
 
 // Lấy danh sách records của một document (phải đặt trước /:id)

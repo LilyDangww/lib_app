@@ -431,6 +431,67 @@ const returnBook = async (borrowDetailId) => {
   }
 };
 
+// Trả tất cả sách trong phiếu mượn: chỉ xử lý chi tiết và bản ghi, KHÔNG gọi updateBorrowTicketStatus tại model
+const returnAllBooks = async (borrowId) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Kiểm tra phiếu mượn có tồn tại không
+    const [[ticket]] = await conn.query(
+      `SELECT id, status FROM borrow_tickets WHERE id = ?`,
+      [borrowId]
+    );
+    if (!ticket) throw new Error("Phiếu mượn không tồn tại");
+
+    // Lấy tất cả chi tiết mượn đang ở trạng thái on_loan hoặc expired
+    const [details] = await conn.query(
+      `SELECT bd.id, bd.borrow_id, bd.record_id, bd.status
+       FROM borrow_details bd
+       WHERE bd.borrow_id = ? AND bd.status IN ('on_loan', 'expired')`,
+      [borrowId]
+    );
+
+    if (!details || details.length === 0) {
+      throw new Error("Không có sách nào đang mượn trong phiếu này để trả");
+    }
+
+    const detailIds = details.map((d) => d.id);
+    const recordIds = details.map((d) => d.record_id);
+
+    // Cập nhật tất cả chi tiết mượn thành 'returned'
+    await conn.query(
+      `UPDATE borrow_details
+       SET status = 'returned', return_date = CURDATE()
+       WHERE id IN (${detailIds.map(() => "?").join(",")})`,
+      detailIds
+    );
+
+    // Cập nhật tất cả bản ghi thành 'available'
+    await conn.query(
+      `UPDATE records SET status = 'available' WHERE id IN (${recordIds.map(() => "?").join(",")})`,
+      recordIds
+    );
+
+    await conn.commit();
+
+    // Trả về borrow_id và danh sách các chi tiết đã trả
+    return {
+      borrowId: borrowId,
+      returnedDetails: details.map((d) => ({
+        detailId: d.id,
+        recordId: d.record_id,
+      })),
+      totalReturned: details.length,
+    };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+};
+
 // ============ DELETE (close) ============
 const closeBorrow = async (id) => {
   await pool.query(`UPDATE borrow_tickets SET status = 'closed' WHERE id = ?`, [
@@ -577,6 +638,7 @@ module.exports = {
   closeBorrow,
   updateBorrowTicketStatus,
   returnBook,
+  returnAllBooks,
   getBorrowsByUser,
   getBorrowSummary,
   getBorrowSummaryByBook,

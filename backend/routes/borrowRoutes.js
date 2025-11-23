@@ -300,6 +300,7 @@ const {
   getAllBorrows,
   getBorrowById,
   returnBook,
+  returnAllBooks,
   updateBorrowStatus,
   autoUpdateOverdue,
   getBorrowSummary,
@@ -333,6 +334,14 @@ router.get(
 
 // Trả sách (đã đăng nhập) - Must be before /:id
 router.patch("/details/:detailId/return", authToken, returnBook);
+
+// Trả tất cả sách trong phiếu mượn (thủ thư) - Must be before /:id
+router.patch(
+  "/:id/return-all",
+  authToken,
+  permission.isLibrarian,
+  returnAllBooks
+);
 
 // Cập nhật trạng thái phiếu mượn (thủ thư) - Must be before /:id
 router.put(
