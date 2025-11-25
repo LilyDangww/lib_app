@@ -270,6 +270,7 @@ const getUserHoldDetails = async (user_id, status = null) => {
       rd.status AS detail_status,
       rd.hold_start_at,
       rd.default_expire_at,
+      rd.cancel_reason,
       r.barcode,
       d.name AS book_title,
       d.image_url AS image_url

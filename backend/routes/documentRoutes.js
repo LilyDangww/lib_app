@@ -302,6 +302,9 @@ router.get(
 router.get("/", getDocumentsForReaders);
 router.get("/readers", getDocumentsForReaders); // giữ lộ trình cũ để tránh phá vỡ client đang dùng
 
+// Public endpoints for categories (no auth required)
+router.get("/categories/public", getCategories);
+
 // Thêm mới / sửa / xóa
 router.post(
   "/",
