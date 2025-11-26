@@ -281,6 +281,7 @@ const {
   importDocuments, // added
   getCategories,
   getPublishers,
+  getAuthors,
   getDocumentRecords,
   getBookSummary,
   addRecordsBulk,
@@ -340,6 +341,13 @@ router.get(
   authToken,
   permission.isLibrarian,
   getPublishers
+);
+
+router.get(
+  "/authors",
+  authToken,
+  permission.isLibrarian,
+  getAuthors
 );
 
 // Thêm nhiều bản ghi cho nhiều sách (phải đặt trước /:id)

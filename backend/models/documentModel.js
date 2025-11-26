@@ -14,25 +14,55 @@ const addDocument = async (docData) => {
     description,
     image_url, // mới
     cloudinary_id, // mới
+    author_ids, // mới: mảng các author_id
   } = docData;
 
-  const [result] = await pool.query(
-    `INSERT INTO documents 
-     (name, publisher_id, published_year, category_id, page_nums, description, image_url, cloudinary_id) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      name,
-      publisher_id ?? null, // cho phép NULL
-      published_year ?? null,
-      category_id, // bắt buộc, không được NULL
-      page_nums ?? null,
-      description ?? null,
-      image_url ?? null,
-      cloudinary_id ?? null,
-    ]
-  );
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  return { id: result.insertId, ...docData };
+    const [result] = await conn.query(
+      `INSERT INTO documents 
+       (name, publisher_id, published_year, category_id, page_nums, description, image_url, cloudinary_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        publisher_id ?? null, // cho phép NULL
+        published_year ?? null,
+        category_id, // bắt buộc, không được NULL
+        page_nums ?? null,
+        description ?? null,
+        image_url ?? null,
+        cloudinary_id ?? null,
+      ]
+    );
+
+    const docId = result.insertId;
+
+    // Thêm authors nếu có
+    if (Array.isArray(author_ids) && author_ids.length > 0) {
+      const validAuthorIds = author_ids
+        .map((id) => Number(id))
+        .filter((id) => !Number.isNaN(id) && id > 0);
+      
+      if (validAuthorIds.length > 0) {
+        for (const authorId of validAuthorIds) {
+          await conn.query(
+            `INSERT IGNORE INTO doc_authors (doc_id, author_id) VALUES (?, ?)`,
+            [docId, authorId]
+          );
+        }
+      }
+    }
+
+    await conn.commit();
+    return { id: docId, ...docData };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 //===========================================================================================
 const getDocumentsForReaders = async (
@@ -120,45 +150,87 @@ const updateDocument = async (id, docData) => {
     description,
     image_url, // có thể undefined (giữ giá trị cũ)
     cloudinary_id, // có thể undefined (giữ giá trị cũ)
+    author_ids, // mới: mảng các author_id (undefined = giữ nguyên, [] = xóa hết, [1,2,3] = cập nhật)
   } = docData;
 
-  // Lấy giá trị hiện tại để tránh ghi null ngoài ý muốn
-  const [[existing]] = await pool.query(
-    `SELECT image_url, cloudinary_id FROM documents WHERE id = ?`,
-    [id]
-  );
-  if (!existing) return false;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  const finalImageUrl =
-    image_url !== undefined ? image_url : existing.image_url;
-  const finalCloudinaryId =
-    cloudinary_id !== undefined ? cloudinary_id : existing.cloudinary_id;
+    // Lấy giá trị hiện tại để tránh ghi null ngoài ý muốn
+    const [[existing]] = await conn.query(
+      `SELECT image_url, cloudinary_id FROM documents WHERE id = ?`,
+      [id]
+    );
+    if (!existing) {
+      await conn.rollback();
+      return false;
+    }
 
-  const [result] = await pool.query(
-    `UPDATE documents 
-     SET name = ?, 
-         publisher_id = ?, 
-         published_year = ?, 
-         category_id = ?, 
-         page_nums = ?, 
-         description = ?,
-         image_url = ?,
-         cloudinary_id = ?
-     WHERE id = ?`,
-    [
-      name,
-      publisher_id ?? null,
-      published_year ?? null,
-      category_id,
-      page_nums ?? null,
-      description ?? null,
-      finalImageUrl ?? null,
-      finalCloudinaryId ?? null,
-      id,
-    ]
-  );
+    const finalImageUrl =
+      image_url !== undefined ? image_url : existing.image_url;
+    const finalCloudinaryId =
+      cloudinary_id !== undefined ? cloudinary_id : existing.cloudinary_id;
 
-  return result.affectedRows > 0;
+    const [result] = await conn.query(
+      `UPDATE documents 
+       SET name = ?, 
+           publisher_id = ?, 
+           published_year = ?, 
+           category_id = ?, 
+           page_nums = ?, 
+           description = ?,
+           image_url = ?,
+           cloudinary_id = ?
+       WHERE id = ?`,
+      [
+        name,
+        publisher_id ?? null,
+        published_year ?? null,
+        category_id,
+        page_nums ?? null,
+        description ?? null,
+        finalImageUrl ?? null,
+        finalCloudinaryId ?? null,
+        id,
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return false;
+    }
+
+    // Cập nhật authors nếu author_ids được cung cấp
+    if (author_ids !== undefined) {
+      // Xóa tất cả authors hiện tại
+      await conn.query(`DELETE FROM doc_authors WHERE doc_id = ?`, [id]);
+
+      // Thêm authors mới nếu có
+      if (Array.isArray(author_ids) && author_ids.length > 0) {
+        const validAuthorIds = author_ids
+          .map((id) => Number(id))
+          .filter((id) => !Number.isNaN(id) && id > 0);
+        
+        if (validAuthorIds.length > 0) {
+          for (const authorId of validAuthorIds) {
+            await conn.query(
+              `INSERT IGNORE INTO doc_authors (doc_id, author_id) VALUES (?, ?)`,
+              [id, authorId]
+            );
+          }
+        }
+      }
+    }
+
+    await conn.commit();
+    return true;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 
 const deleteDocument = async (id) => {
@@ -222,6 +294,21 @@ const getPublishers = async () => {
     `
     SELECT id, name
     FROM publishers
+    ORDER BY name ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+  }));
+};
+
+const getAuthors = async () => {
+  const [rows] = await pool.query(
+    `
+    SELECT id, name
+    FROM authors
     ORDER BY name ASC
     `
   );
@@ -646,5 +733,6 @@ module.exports = {
   importDocumentsFromFile, // added
   getCategories,
   getPublishers,
+  getAuthors,
   getBookSummary,
 };

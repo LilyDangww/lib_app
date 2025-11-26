@@ -61,6 +61,7 @@ const addDocument = async (req, res) => {
       description,
       image_url,
       cloudinary_id,
+      author_ids, // mới: mảng các author_id
     } = req.body;
 
     const trimmedName = typeof name === "string" ? name.trim() : name;
@@ -73,6 +74,17 @@ const addDocument = async (req, res) => {
       return res.status(400).json({ message: "Category ID is required" });
     }
 
+    // Validate author_ids nếu có
+    let normalizedAuthorIds = undefined;
+    if (author_ids !== undefined) {
+      if (!Array.isArray(author_ids)) {
+        return res.status(400).json({ message: "author_ids must be an array" });
+      }
+      normalizedAuthorIds = author_ids
+        .map((id) => normalizeNullableNumber(id))
+        .filter((id) => id !== null);
+    }
+
     // Gọi model
     const newDoc = await Document.addDocument({
       name: trimmedName,
@@ -83,6 +95,7 @@ const addDocument = async (req, res) => {
       description: normalizeNullableString(description),
       image_url: normalizeNullableString(image_url),
       cloudinary_id: normalizeNullableString(cloudinary_id),
+      author_ids: normalizedAuthorIds,
     });
 
     res.status(201).json({
@@ -95,7 +108,7 @@ const addDocument = async (req, res) => {
     if (error.code === "ER_NO_REFERENCED_ROW_2") {
       return res
         .status(400)
-        .json({ message: "Invalid category_id or publisher_id" });
+        .json({ message: "Invalid category_id, publisher_id, or author_id" });
     }
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -114,6 +127,7 @@ const updateDocument = async (req, res) => {
       description,
       image_url,
       cloudinary_id,
+      author_ids, // mới: mảng các author_id
     } = req.body;
 
     const trimmedName = typeof name === "string" ? name.trim() : name;
@@ -124,6 +138,17 @@ const updateDocument = async (req, res) => {
     const normalizedCategoryId = normalizeNullableNumber(category_id);
     if (!normalizedCategoryId) {
       return res.status(400).json({ message: "Category ID is required" });
+    }
+
+    // Validate author_ids nếu có
+    let normalizedAuthorIds = undefined;
+    if (author_ids !== undefined) {
+      if (!Array.isArray(author_ids)) {
+        return res.status(400).json({ message: "author_ids must be an array" });
+      }
+      normalizedAuthorIds = author_ids
+        .map((id) => normalizeNullableNumber(id))
+        .filter((id) => id !== null);
     }
 
     // Gọi model
@@ -137,6 +162,7 @@ const updateDocument = async (req, res) => {
       image_url: image_url === undefined ? undefined : normalizeNullableString(image_url),
       cloudinary_id:
         cloudinary_id === undefined ? undefined : normalizeNullableString(cloudinary_id),
+      author_ids: normalizedAuthorIds,
     });
 
     if (!updatedDoc) {
@@ -153,7 +179,7 @@ const updateDocument = async (req, res) => {
     if (error.code === "ER_NO_REFERENCED_ROW_2") {
       return res
         .status(400)
-        .json({ message: "Invalid category_id or publisher_id" });
+        .json({ message: "Invalid category_id, publisher_id, or author_id" });
     }
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -301,6 +327,16 @@ const getPublishers = async (_req, res) => {
   }
 };
 
+const getAuthors = async (_req, res) => {
+  try {
+    const authors = await Document.getAuthors();
+    res.json(authors);
+  } catch (error) {
+    console.error("Error fetching authors:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 //===========================================================================================
 // Lấy danh sách tất cả bản ghi của một tài liệu
 const getDocumentRecords = async (req, res) => {
@@ -385,6 +421,7 @@ module.exports = {
   importDocuments, // added
   getCategories,
   getPublishers,
+  getAuthors,
   getDocumentRecords,
   getBookSummary,
   addRecordsBulk,
