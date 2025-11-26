@@ -286,6 +286,7 @@ const {
   getDocumentRecords,
   getBookSummary,
   addRecordsBulk,
+  changeRecordStatus,
 } = require("../controllers/documentController");
 
 // LIST routes (cụ thể) luôn trước route động :id
@@ -372,6 +373,14 @@ router.get(
   authToken,
   permission.isLibrarian,
   getDocumentRecords
+);
+
+// Thay đổi trạng thái của một bản ghi (phải đặt trước /:id)
+router.patch(
+  "/records/:id/status",
+  authToken,
+  permission.isLibrarian,
+  changeRecordStatus
 );
 
 // Chi tiết (đặt cuối)

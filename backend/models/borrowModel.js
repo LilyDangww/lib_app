@@ -482,6 +482,51 @@ const returnBook = async (borrowDetailId) => {
   }
 };
 
+// Đánh dấu sách là mất: cập nhật chi tiết mượn và bản ghi
+const markBookAsLost = async (borrowDetailId) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[detail]] = await conn.query(
+      `SELECT bd.id, bd.borrow_id, bd.record_id, bd.status
+       FROM borrow_details bd
+       WHERE bd.id = ?`,
+      [borrowDetailId]
+    );
+    if (!detail) throw new Error("Chi tiết mượn không tồn tại");
+    if (detail.status === "returned" || detail.status === "lost")
+      throw new Error("Không thể đánh dấu mất: chi tiết mượn đã được trả hoặc đã được đánh dấu mất");
+
+    // Cập nhật chi tiết mượn thành "lost"
+    await conn.query(
+      `UPDATE borrow_details
+       SET status = 'lost', return_date = CURDATE()
+       WHERE id = ?`,
+      [borrowDetailId]
+    );
+
+    // Cập nhật bản ghi thành "lost"
+    await conn.query(`UPDATE records SET status = 'lost' WHERE id = ?`, [
+      detail.record_id,
+    ]);
+
+    await conn.commit();
+
+    // Trả về borrow_id để controller tự gọi updateBorrowTicketStatus
+    return {
+      borrowId: detail.borrow_id,
+      detailId: detail.id,
+      recordId: detail.record_id,
+    };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+};
+
 // Trả tất cả sách trong phiếu mượn: chỉ xử lý chi tiết và bản ghi, KHÔNG gọi updateBorrowTicketStatus tại model
 const returnAllBooks = async (borrowId) => {
   const conn = await pool.getConnection();
@@ -689,6 +734,7 @@ module.exports = {
   closeBorrow,
   updateBorrowTicketStatus,
   returnBook,
+  markBookAsLost,
   returnAllBooks,
   getBorrowsByUser,
   getBorrowSummary,

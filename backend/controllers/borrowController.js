@@ -94,6 +94,18 @@ const returnBook = async (req, res) => {
   }
 };
 
+// Đánh dấu sách là mất
+const markBookAsLost = async (req, res) => {
+  try {
+    const { detailId } = req.params;
+    const result = await Borrow.markBookAsLost(detailId);
+    await Borrow.updateBorrowTicketStatus(result.borrowId);
+    res.json({ message: "Đã đánh dấu sách là mất", ...result });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 // Librarian trả tất cả sách trong phiếu mượn
 const returnAllBooks = async (req, res) => {
   try {
@@ -189,6 +201,7 @@ module.exports = {
   getAllBorrows,
   getBorrowById,
   returnBook,
+  markBookAsLost,
   returnAllBooks,
   updateBorrowStatus,
   autoUpdateOverdue,

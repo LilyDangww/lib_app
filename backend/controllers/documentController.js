@@ -431,6 +431,59 @@ const addRecordsBulk = async (req, res) => {
   }
 };
 
+//===========================================================================================
+// Thay đổi trạng thái của một bản ghi (record)
+const changeRecordStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Validate status is provided
+    if (!status) {
+      return res.status(400).json({ message: "Status is required" });
+    }
+
+    // Valid status values
+    const validStatuses = [
+      "available",
+      "on_loan",
+      "borrowed",
+      "reserved_pending",
+      "lost",
+      "damaged",
+      "removed",
+      "processing",
+    ];
+
+    // Validate status value
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        message: `Invalid status. Valid statuses are: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    // Import Record model
+    const Record = require("../models/recordModel");
+
+    // Check if record exists
+    const existingRecord = await Record.getRecordById(id);
+    if (!existingRecord) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    // Update record status
+    const updatedRecord = await Record.updateRecord(id, { status });
+
+    res.json({
+      message: "Record status updated successfully",
+      record: updatedRecord,
+    });
+  } catch (error) {
+    console.error("Error in changeRecordStatus:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -446,4 +499,5 @@ module.exports = {
   getDocumentRecords,
   getBookSummary,
   addRecordsBulk,
+  changeRecordStatus,
 };
