@@ -9,6 +9,19 @@ const normalizeDocStatus = (raw = {}) => ({
 });
 
 const getDashboardStats = async (req, res) => {
+  // Lấy month=YYYY-MM từ FE
+  const month = req.query.month;
+
+  let startDate = null;
+  let endDate = null;
+
+  if (month) {
+    const [year, mm] = month.split("-");
+    startDate = `${year}-${mm}-01`;
+    // SQL auto-handle tháng 28/30/31 ngày
+    endDate = `${year}-${mm}-31`;
+  }
+
   try {
     const [
       readerStats,
@@ -29,7 +42,8 @@ const getDashboardStats = async (req, res) => {
       Dashboard.getTopUsers(), // top 3 độc giả
       Dashboard.getDocumentStatusStats(), // sách theo tình trạng hiện tại
       Dashboard.getActiveBorrowTicketCount(), // số phiếu mượn đang hoạt động
-      Dashboard.getBorrowReturnChartCurrentMonth(), // <-- mới
+      Dashboard.getBorrowReturnChartByMonth(startDate, endDate),
+      //Dashboard.getBorrowReturnChartCurrentMonth(), // <-- mới
     ]);
 
     const docStatus = normalizeDocStatus(docStatusRaw);

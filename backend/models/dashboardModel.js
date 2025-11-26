@@ -110,47 +110,91 @@ module.exports = {
   // ============================
   // LƯỢT MƯỢN / TRẢ THEO THỜI GIAN (theo SÁCH, TRONG THÁNG HIỆN TẠI)
   // ============================
-  getBorrowReturnChartCurrentMonth: async () => {
-    // Từ ngày đầu tháng hiện tại đến hôm nay
+  //   getBorrowReturnChartCurrentMonth: async () => {
+  //     // Từ ngày đầu tháng hiện tại đến hôm nay
+  //     const [rows] = await pool.query(
+  //       `
+  //       /* ngày mượn theo SÁCH trong tháng hiện tại */
+  //       WITH borrow_days AS (
+  //         SELECT
+  //           DATE(bt.borrow_date) AS date,
+  //           COUNT(bd.id) AS borrow_count
+  //         FROM borrow_tickets bt
+  //         JOIN borrow_details bd ON bt.id = bd.borrow_id
+  //         WHERE bt.borrow_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+  //           AND bt.borrow_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+  //         GROUP BY DATE(bt.borrow_date)
+  //       ),
+  //       /* ngày trả theo SÁCH (status = returned) trong tháng hiện tại */
+  //       return_days AS (
+  //         SELECT
+  //           DATE(bd.updated_at) AS date,
+  //           COUNT(bd.id) AS return_count
+  //         FROM borrow_details bd
+  //         WHERE bd.status = 'returned'
+  //           AND bd.updated_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+  //           AND bd.updated_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+  //         GROUP BY DATE(bd.updated_at)
+  //       )
+  //       SELECT
+  //         d.date,
+  //         IFNULL(b.borrow_count, 0) AS borrow_count,
+  //         IFNULL(r.return_count, 0) AS return_count
+  //       FROM (
+  //         SELECT date FROM borrow_days
+  //         UNION
+  //         SELECT date FROM return_days
+  //       ) d
+  //       LEFT JOIN borrow_days b ON d.date = b.date
+  //       LEFT JOIN return_days r ON d.date = r.date
+  //       ORDER BY d.date ASC
+  //       `
+  //     );
+
+  //     return rows; // [{ date: '2025-03-01', borrow_count: 3, return_count: 1 }, ...]
+  //   },
+  // };
+  getBorrowReturnChartByMonth: async (startDate, endDate) => {
+    // Nếu không có tháng -> mặc định tháng hiện tại
+    const fallbackStart = `DATE_FORMAT(CURDATE(), '%Y-%m-01')`;
+    const fallbackEnd = `DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)`;
+
+    const start = startDate ? `'${startDate}'` : fallbackStart;
+    const end = endDate ? `'${endDate}'` : fallbackEnd;
+
     const [rows] = await pool.query(
       `
-      /* ngày mượn theo SÁCH trong tháng hiện tại */
-      WITH borrow_days AS (
-        SELECT 
-          DATE(bt.borrow_date) AS date,
-          COUNT(bd.id) AS borrow_count
-        FROM borrow_tickets bt
-        JOIN borrow_details bd ON bt.id = bd.borrow_id
-        WHERE bt.borrow_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-          AND bt.borrow_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
-        GROUP BY DATE(bt.borrow_date)
-      ),
-      /* ngày trả theo SÁCH (status = returned) trong tháng hiện tại */
-      return_days AS (
-        SELECT 
-          DATE(bd.updated_at) AS date,
-          COUNT(bd.id) AS return_count
-        FROM borrow_details bd
-        WHERE bd.status = 'returned'
-          AND bd.updated_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-          AND bd.updated_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
-        GROUP BY DATE(bd.updated_at)
-      )
-      SELECT 
-        d.date,
-        IFNULL(b.borrow_count, 0) AS borrow_count,
-        IFNULL(r.return_count, 0) AS return_count
-      FROM (
-        SELECT date FROM borrow_days
-        UNION
-        SELECT date FROM return_days
-      ) d
-      LEFT JOIN borrow_days b ON d.date = b.date
-      LEFT JOIN return_days r ON d.date = r.date
-      ORDER BY d.date ASC
-      `
+    WITH borrow_days AS (
+      SELECT DATE(bt.borrow_date) AS date, COUNT(bd.id) AS borrow_count
+      FROM borrow_tickets bt
+      JOIN borrow_details bd ON bt.id = bd.borrow_id
+      WHERE bt.borrow_date >= ${start}
+        AND bt.borrow_date <  ${end}
+      GROUP BY DATE(bt.borrow_date)
+    ),
+    return_days AS (
+      SELECT DATE(bd.updated_at) AS date, COUNT(bd.id) AS return_count
+      FROM borrow_details bd
+      WHERE bd.status = 'returned'
+        AND bd.updated_at >= ${start}
+        AND bd.updated_at <  ${end}
+      GROUP BY DATE(bd.updated_at)
+    )
+    SELECT 
+      d.date,
+      IFNULL(b.borrow_count, 0) AS borrow_count,
+      IFNULL(r.return_count, 0) AS return_count
+    FROM (
+      SELECT date FROM borrow_days
+      UNION
+      SELECT date FROM return_days
+    ) d
+    LEFT JOIN borrow_days b ON d.date = b.date
+    LEFT JOIN return_days r ON d.date = r.date
+    ORDER BY d.date ASC
+    `
     );
 
-    return rows; // [{ date: '2025-03-01', borrow_count: 3, return_count: 1 }, ...]
+    return rows;
   },
 };

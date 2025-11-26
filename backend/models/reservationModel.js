@@ -106,12 +106,14 @@ const getReservationWithDetailsById = async (id) => {
         rd.status AS detail_status,
         rd.hold_start_at,
         rd.default_expire_at,
-        rd.cancel_reason
+        rd.cancel_reason,
+        l.location AS location_name
      FROM reservation_tickets rt
      JOIN users u ON rt.user_id = u.id  
      JOIN reservation_details rd ON rt.id = rd.reservation_id
      JOIN records r ON rd.record_id = r.id
      JOIN documents d ON r.doc_id = d.id
+      LEFT JOIN locations l ON r.location_id = l.id
      WHERE rt.id = ?`,
     [id]
   );
@@ -184,7 +186,11 @@ const confirmReservationDetails = async (reservation_id) => {
   }
 };
 
-const updateReservationDetailById = async (detail_id, newStatus, cancelReason = null) => {
+const updateReservationDetailById = async (
+  detail_id,
+  newStatus,
+  cancelReason = null
+) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -304,7 +310,7 @@ const getReservationsWithDetails = async (
   limit = 10
 ) => {
   const offset = (page - 1) * limit;
-  
+
   // Build WHERE clause for count and data queries
   let whereClause = " WHERE 1=1";
   const params = [];

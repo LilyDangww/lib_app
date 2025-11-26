@@ -9,6 +9,7 @@ const userRoutes = require("./userRoutes");
 const authRoutes = require("./authRoutes");
 const reservationRoutes = require("./reservationRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
+const categoryRoutes = require("./categoryRoutes");
 
 // ========== Test route gốc ==========
 router.get("/", (req, res) => {
@@ -24,6 +25,7 @@ router.use("/auth", authRoutes);
 router.use("/reservations", reservationRoutes);
 router.use("/fines", require("./finesRoutes"));
 router.use("/dashboard", require("./dashboardRoutes"));
+router.use("/categories", require("./categoryRoutes"));
 
 // router.use("/inventory", require("./inventoryRoutes"));
 
