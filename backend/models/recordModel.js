@@ -42,47 +42,142 @@ const createRecordsBulk = async (records) => {
 
     const insertedRecords = [];
     const errors = [];
+    const seenBarcodes = new Set();
 
-    for (let i = 0; i < records.length; i++) {
-      const record = records[i];
-      const { doc_id, barcode, location_id, status, condition_note } = record;
-
-      if (!doc_id || !barcode) {
-        errors.push({
-          index: i,
-          record,
-          error: "doc_id và barcode là bắt buộc",
-        });
-        continue;
+    // Check for duplicate barcodes within the request
+    const barcodeMap = new Map();
+    records.forEach((record, index) => {
+      if (record.barcode) {
+        const barcode = record.barcode.trim();
+        if (barcodeMap.has(barcode)) {
+          barcodeMap.get(barcode).push(index);
+        } else {
+          barcodeMap.set(barcode, [index]);
+        }
       }
+    });
 
-      try {
-        const [result] = await conn.query(
-          `INSERT INTO records (doc_id, barcode, location_id, status, condition_note)
-           VALUES (?, ?, ?, ?, ?)`,
-          [
-            doc_id,
-            barcode,
-            location_id || null,
-            status || "available",
-            condition_note || null,
-          ]
+    // Check for duplicates in request
+    for (const [barcode, indices] of barcodeMap.entries()) {
+      if (indices.length > 1) {
+        indices.forEach((index) => {
+          errors.push({
+            index,
+            record: records[index],
+            error: `Mã vạch "${barcode}" bị trùng trong yêu cầu này`,
+          });
+        });
+      }
+    }
+
+    // Get all barcodes to check against database
+    const allBarcodes = Array.from(barcodeMap.keys());
+    if (allBarcodes.length > 0) {
+      const placeholders = allBarcodes.map(() => "?").join(",");
+      const [existingBarcodes] = await conn.query(
+        `SELECT barcode FROM records WHERE barcode IN (${placeholders})`,
+        allBarcodes
+      );
+
+      const existingBarcodeSet = new Set(
+        existingBarcodes.map((row) => row.barcode)
+      );
+
+      // Check each record
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        const { doc_id, barcode, location_id, status, condition_note } = record;
+
+        // Skip if already marked as error (duplicate in request)
+        if (errors.some((e) => e.index === i)) {
+          continue;
+        }
+
+        if (!doc_id || !barcode) {
+          errors.push({
+            index: i,
+            record,
+            error: "doc_id và barcode là bắt buộc",
+          });
+          continue;
+        }
+
+        const trimmedBarcode = barcode.trim();
+        if (trimmedBarcode === "") {
+          errors.push({
+            index: i,
+            record,
+            error: "Mã vạch không được để trống",
+          });
+          continue;
+        }
+
+        // Check if barcode already exists in database
+        if (existingBarcodeSet.has(trimmedBarcode)) {
+          errors.push({
+            index: i,
+            record,
+            error: `Mã vạch "${trimmedBarcode}" đã tồn tại trong hệ thống`,
+          });
+          continue;
+        }
+
+        // Check if document exists
+        const [[docExists]] = await conn.query(
+          `SELECT id FROM documents WHERE id = ? AND is_active = 1`,
+          [doc_id]
         );
 
-        insertedRecords.push({
-          id: result.insertId,
-          doc_id,
-          barcode,
-          location_id,
-          status: status || "available",
-          condition_note,
-        });
-      } catch (err) {
-        errors.push({
-          index: i,
-          record,
-          error: err.message,
-        });
+        if (!docExists) {
+          errors.push({
+            index: i,
+            record,
+            error: `Tài liệu với ID ${doc_id} không tồn tại hoặc không hoạt động`,
+          });
+          continue;
+        }
+
+        try {
+          const [result] = await conn.query(
+            `INSERT INTO records (doc_id, barcode, location_id, status, condition_note)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              doc_id,
+              trimmedBarcode,
+              location_id || null,
+              status || "available",
+              condition_note || null,
+            ]
+          );
+
+          insertedRecords.push({
+            id: result.insertId,
+            doc_id,
+            barcode: trimmedBarcode,
+            location_id,
+            status: status || "available",
+            condition_note,
+          });
+
+          // Add to seen set to prevent duplicates in same transaction
+          seenBarcodes.add(trimmedBarcode);
+          existingBarcodeSet.add(trimmedBarcode); // Add to existing set to prevent duplicates in same batch
+        } catch (err) {
+          // Handle database constraint errors (e.g., unique constraint on barcode)
+          if (err.code === "ER_DUP_ENTRY") {
+            errors.push({
+              index: i,
+              record,
+              error: `Mã vạch "${trimmedBarcode}" đã tồn tại trong hệ thống`,
+            });
+          } else {
+            errors.push({
+              index: i,
+              record,
+              error: err.message,
+            });
+          }
+        }
       }
     }
 

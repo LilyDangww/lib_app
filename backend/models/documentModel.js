@@ -319,6 +319,21 @@ const getAuthors = async () => {
   }));
 };
 
+const getLocations = async () => {
+  const [rows] = await pool.query(
+    `
+    SELECT id, location AS name
+    FROM locations
+    ORDER BY location ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+  }));
+};
+
 // Lấy thông tin chi tiết của một sách (thêm image_url)
 const getDocumentById = async (id) => {
   const [[doc]] = await pool.query(
@@ -734,5 +749,6 @@ module.exports = {
   getCategories,
   getPublishers,
   getAuthors,
+  getLocations,
   getBookSummary,
 };

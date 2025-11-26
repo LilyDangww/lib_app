@@ -337,6 +337,16 @@ const getAuthors = async (_req, res) => {
   }
 };
 
+const getLocations = async (_req, res) => {
+  try {
+    const locations = await Document.getLocations();
+    res.json(locations);
+  } catch (error) {
+    console.error("Error fetching locations:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 //===========================================================================================
 // Lấy danh sách tất cả bản ghi của một tài liệu
 const getDocumentRecords = async (req, res) => {
@@ -387,7 +397,7 @@ const addRecordsBulk = async (req, res) => {
       });
     }
 
-    // Validate each record
+    // Basic validation: check required fields
     for (let i = 0; i < records.length; i++) {
       const record = records[i];
       if (!record.doc_id || !record.barcode) {
@@ -401,8 +411,18 @@ const addRecordsBulk = async (req, res) => {
     const Record = require("../models/recordModel");
     const result = await Record.createRecordsBulk(records);
 
-    res.status(201).json({
-      message: `Successfully created ${result.success} record(s)${result.failed > 0 ? `, ${result.failed} failed` : ""}`,
+    // If all failed, return error status
+    if (result.success === 0 && result.failed > 0) {
+      return res.status(400).json({
+        message: `Không thể tạo bất kỳ bản ghi nào. ${result.failed} bản ghi thất bại.`,
+        ...result,
+      });
+    }
+
+    // Partial success or full success
+    const statusCode = result.failed > 0 ? 207 : 201; // 207 Multi-Status for partial success
+    res.status(statusCode).json({
+      message: `Đã tạo thành công ${result.success} bản ghi${result.failed > 0 ? `, ${result.failed} bản ghi thất bại` : ""}`,
       ...result,
     });
   } catch (error) {
@@ -422,6 +442,7 @@ module.exports = {
   getCategories,
   getPublishers,
   getAuthors,
+  getLocations,
   getDocumentRecords,
   getBookSummary,
   addRecordsBulk,
