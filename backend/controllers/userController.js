@@ -66,11 +66,16 @@ const getUserByEmail = async (req, res) => {
   }
 };
 
-// Lấy tất cả users
+// Lấy tất cả users với pagination và search
 const getUsers = async (req, res) => {
   try {
-    const users = await User.getAllUsers();
-    res.json(users);
+    const { page = 1, limit = 10, search } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const searchTerm = search && search.trim() ? search.trim() : null;
+
+    const result = await User.getAllUsers(pageNum, limitNum, searchTerm);
+    res.json(result);
   } catch (error) {
     console.error(error);
     res

@@ -69,13 +69,52 @@ const getUserByEmail = async (email) => {
   return rows[0];
 };
 
-// Lấy tất cả users
-const getAllUsers = async () => {
-  const [rows] = await pool.query(
-    `SELECT id, username, email, gender, dob, phone, is_active, created_at 
-     FROM users WHERE is_active = 1`
-  );
-  return rows;
+// Lấy tất cả users với pagination và search
+const getAllUsers = async (page = 1, limit = 10, search = null) => {
+  const offset = (page - 1) * limit;
+  
+  // Build WHERE clause
+  let whereClause = " WHERE is_active = 1";
+  const params = [];
+  const countParams = [];
+  
+  if (search) {
+    whereClause += ` AND (username LIKE ? OR email LIKE ? OR phone LIKE ?)`;
+    const searchPattern = `%${search}%`;
+    params.push(searchPattern, searchPattern, searchPattern);
+    countParams.push(searchPattern, searchPattern, searchPattern);
+  }
+  
+  // Count total records
+  let countQuery = `
+    SELECT COUNT(*) as total
+    FROM users
+    ${whereClause}
+  `;
+  
+  const [countResult] = await pool.query(countQuery, countParams);
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+  
+  // Get paginated data
+  let query = `
+    SELECT id, username, email, gender, dob, phone, is_active, created_at 
+    FROM users
+    ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `;
+  params.push(limit, offset);
+  
+  const [rows] = await pool.query(query, params);
+  
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    data: rows,
+  };
 };
 
 // Lấy user theo ID

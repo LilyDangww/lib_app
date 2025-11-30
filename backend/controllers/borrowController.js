@@ -39,10 +39,10 @@ const getMyBorrows = async (req, res) => {
   try {
     const { fromDate, toDate } = req.query;
 
-    // Lấy theo chi tiết mượn + thông tin sách/record
-    const rows = await Borrow.getBorrowsByUser(req.user.id, fromDate, toDate);
+    // Lấy theo chi tiết mượn + thông tin sách/record (no pagination limit for user's own borrows)
+    const result = await Borrow.getBorrowsByUser(req.user.id, fromDate, toDate, 1, 1000);
 
-    const mapped = rows.map((r) => ({
+    const mapped = result.data.map((r) => ({
       ...r,
       borrow_type: r.reservation_detail_id ? "online" : "at_library",
     }));
@@ -78,6 +78,31 @@ const getAllBorrows = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error getAllBorrows:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================== Lấy phiếu mượn theo user_id (cho admin) ==================
+const getBorrowsByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+
+    const result = await Borrow.getBorrowsByUser(userId, fromDate, toDate, pageNum, limitNum);
+
+    const mapped = result.data.map((r) => ({
+      ...r,
+      borrow_type: r.reservation_detail_id ? "online" : "at_library",
+    }));
+
+    res.json({
+      ...result,
+      data: mapped,
+    });
+  } catch (error) {
+    console.error("❌ Error getBorrowsByUserId:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -199,6 +224,7 @@ module.exports = {
   createBorrow,
   getMyBorrows,
   getAllBorrows,
+  getBorrowsByUserId,
   getBorrowById,
   returnBook,
   markBookAsLost,

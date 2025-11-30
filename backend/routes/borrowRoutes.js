@@ -298,6 +298,7 @@ const {
   createBorrow,
   getMyBorrows,
   getAllBorrows,
+  getBorrowsByUserId,
   getBorrowById,
   returnBook,
   markBookAsLost,
@@ -316,6 +317,9 @@ router.get("/me", authToken, getMyBorrows);
 
 // Thủ thư xem tất cả phiếu mượn
 router.get("/", authToken, permission.isLibrarian, getAllBorrows);
+
+// Thủ thư xem phiếu mượn theo user_id - Must be before /:id
+router.get("/user/:userId", authToken, permission.isLibrarian, getBorrowsByUserId);
 
 // Tóm tắt thống kê mượn (thủ thư) - Must be before /:id
 router.get(

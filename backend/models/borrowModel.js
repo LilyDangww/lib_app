@@ -315,7 +315,34 @@ const getBorrowById = async (id) => {
 };
 
 // Danh sách chi tiết mượn của user hiện thời (ưu tiên chi tiết + thông tin sách/record)
-const getBorrowsByUser = async (userId, fromDate, toDate) => {
+const getBorrowsByUser = async (userId, fromDate, toDate, page = 1, limit = 10) => {
+  const offset = (page - 1) * limit;
+  
+  // Count total records
+  let countSql = `
+    SELECT COUNT(bd.id) as total
+    FROM borrow_tickets b
+    JOIN borrow_details bd ON bd.borrow_id = b.id
+    JOIN records r ON r.id = bd.record_id
+    JOIN documents d ON d.id = r.doc_id
+    WHERE b.user_id = ?
+  `;
+  const countParams = [userId];
+
+  if (fromDate) {
+    countSql += ` AND b.borrow_date >= ?`;
+    countParams.push(fromDate);
+  }
+  if (toDate) {
+    countSql += ` AND b.borrow_date <= ?`;
+    countParams.push(toDate);
+  }
+
+  const [countResult] = await pool.query(countSql, countParams);
+  const total = countResult[0].total;
+  const totalPages = Math.ceil(total / limit);
+
+  // Get paginated data
   let sql = `
     SELECT
       b.id AS borrow_id,
@@ -347,10 +374,18 @@ const getBorrowsByUser = async (userId, fromDate, toDate) => {
     params.push(toDate);
   }
 
-  sql += ` ORDER BY b.borrow_date DESC, bd.id DESC`;
+  sql += ` ORDER BY b.borrow_date DESC, bd.id DESC LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
 
   const [rows] = await pool.query(sql, params);
-  return rows;
+  
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    data: rows,
+  };
 };
 
 // ============ UPDATE ============
