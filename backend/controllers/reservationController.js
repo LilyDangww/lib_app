@@ -33,7 +33,15 @@ const createReservation = async (req, res) => {
 // GET /api/reservations/librarian/list?status=on_hold&startDate=2025-10-20
 const getReservationsForLibrarian = async (req, res) => {
   try {
-    const { status, startDate, endDate, userKeyword, sort, page = 1, limit = 10 } = req.query;
+    const {
+      status,
+      startDate,
+      endDate,
+      userKeyword,
+      sort,
+      page = 1,
+      limit = 10,
+    } = req.query;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
 
@@ -115,8 +123,12 @@ const updateReservationDetail = async (req, res) => {
     }
 
     // Nếu là cancelled và có reason, truyền reason vào
-    const cancelReason = (status === "cancelled" && reason) ? reason : null;
-    const ok = await Reservation.updateReservationDetailById(detail_id, status, cancelReason);
+    const cancelReason = status === "cancelled" && reason ? reason : null;
+    const ok = await Reservation.updateReservationDetailById(
+      detail_id,
+      status,
+      cancelReason
+    );
 
     if (!ok) {
       return res.status(404).json({ message: "Reservation detail not found" });
@@ -147,13 +159,18 @@ const cancelReservationDetailForLibrarian = async (req, res) => {
 
     // Kiểm tra trạng thái hợp lệ
     if (!["pending", "on_hold"].includes(detail.detail_status)) {
-      return res.status(400).json({ 
-        message: "Cannot cancel detail at this stage. Only pending or on_hold details can be cancelled." 
+      return res.status(400).json({
+        message:
+          "Cannot cancel detail at this stage. Only pending or on_hold details can be cancelled.",
       });
     }
 
     // Hủy chi tiết với lý do
-    const ok = await Reservation.updateReservationDetailById(detail_id, "cancelled", reason.trim());
+    const ok = await Reservation.updateReservationDetailById(
+      detail_id,
+      "cancelled",
+      reason.trim()
+    );
 
     if (!ok) {
       return res.status(404).json({ message: "Reservation detail not found" });
@@ -165,36 +182,42 @@ const cancelReservationDetailForLibrarian = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// 📘 Người đọc huỷ 1 chi tiết giữ
 const cancelReservationDetailReader = async (req, res) => {
   try {
     const { detail_id } = req.params;
     const user_id = req.user.id;
+    const { reason } = req.body; // 👈 LẤY LÝ DO
 
-    // 1️⃣ Lấy thông tin chi tiết giữ để xác thực
+    // 1️⃣ Lấy chi tiết
     const detail = await Reservation.getReservationDetailBasicById(detail_id);
     if (!detail)
       return res.status(404).json({ message: "Reservation detail not found" });
 
     // 2️⃣ Kiểm tra quyền sở hữu
     if (detail.user_id !== user_id)
-      return res
-        .status(403)
-        .json({ message: "Unauthorized: This reservation is not yours" });
+      return res.status(403).json({ message: "Unauthorized" });
 
     // 3️⃣ Kiểm tra trạng thái hợp lệ
     if (!["pending", "on_hold"].includes(detail.detail_status))
       return res.status(400).json({ message: "Cannot cancel at this stage" });
 
-    // 4️⃣ Gọi hàm cập nhật có sẵn
-    await Reservation.updateReservationDetailById(detail_id, "cancelled");
+    // 4️⃣ Hủy có lý do (📌 GIỐNG THỦ THƯ)
+    await Reservation.updateReservationDetailById(
+      detail_id,
+      "cancelled",
+      reason?.trim() || null
+    );
 
-    res.json({ message: "Reservation detail cancelled successfully" });
+    res.json({
+      message: "Reservation detail cancelled successfully",
+      reason: reason?.trim() || null,
+    });
   } catch (error) {
     console.error("❌ Error in cancelReservationDetailReader:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
 // 📘 Người đọc huỷ toàn bộ phiếu giữ của mình
 const cancelReservation = async (req, res) => {
   try {
@@ -262,8 +285,8 @@ const cancelReservationForLibrarian = async (req, res) => {
 
     // 2️⃣ Kiểm tra nếu phiếu đã bị đóng
     if (reservation.ticket_status === "closed") {
-      return res.status(400).json({ 
-        message: "Reservation is already closed" 
+      return res.status(400).json({
+        message: "Reservation is already closed",
       });
     }
 
@@ -332,7 +355,7 @@ const getReservationDetailsById = async (req, res) => {
   try {
     const { id } = req.params;
     const details = await Reservation.getReservationWithDetailsById(id);
-    
+
     if (!details || details.length === 0) {
       return res.status(404).json({ message: "Reservation not found" });
     }

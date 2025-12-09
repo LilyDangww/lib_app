@@ -44,7 +44,7 @@ const addDocument = async (docData) => {
       const validAuthorIds = author_ids
         .map((id) => Number(id))
         .filter((id) => !Number.isNaN(id) && id > 0);
-      
+
       if (validAuthorIds.length > 0) {
         for (const authorId of validAuthorIds) {
           await conn.query(
@@ -211,7 +211,7 @@ const updateDocument = async (id, docData) => {
         const validAuthorIds = author_ids
           .map((id) => Number(id))
           .filter((id) => !Number.isNaN(id) && id > 0);
-        
+
         if (validAuthorIds.length > 0) {
           for (const authorId of validAuthorIds) {
             await conn.query(
