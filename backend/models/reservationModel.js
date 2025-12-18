@@ -402,64 +402,59 @@ const getReservationsWithDetails = async (
   const [rows] = await pool.query(query, params);
   return { page, limit, total, totalPages, data: rows };
 };
-
-// Tự động hết hạn phiếu giữ (quá 2 ngày kể từ request_date)
+// Auto expire reservation tickets & details (over 2 days)
 const expireOverdueReservations = async () => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // 1️⃣ Lấy danh sách phiếu còn đang active hoặc processing đã quá 2 ngày
-    const [overdueTickets] = await conn.query(`
-      SELECT id 
+    // 1) Lấy danh sách phiếu giữ quá hạn
+    const [tickets] = await conn.query(`
+      SELECT id
       FROM reservation_tickets
       WHERE status IN ('processing', 'active')
       AND request_date < DATE_SUB(NOW(), INTERVAL 2 DAY)
     `);
 
-    if (overdueTickets.length === 0) {
+    if (tickets.length === 0) {
       await conn.commit();
-      return { message: "Không có phiếu giữ nào quá hạn." };
+      return { message: "Không có phiếu giữ quá hạn." };
     }
 
-    // 2️⃣ Cập nhật từng phiếu
-    for (const ticket of overdueTickets) {
-      // Cập nhật chi tiết và record
+    // 2) Cập nhật chi tiết + record
+    for (const t of tickets) {
+      // Chi tiết giữ quá hạn
       await conn.query(
         `
         UPDATE reservation_details rd
-        JOIN records r ON rd.record_id = r.id
-        SET rd.status = 'expired',
-            r.status = 'available'
+        JOIN records r ON r.id = rd.record_id
+        SET
+          rd.status = 'expired',
+          r.status = 'available'
         WHERE rd.reservation_id = ?
           AND rd.status IN ('pending', 'on_hold')
-      `,
-        [ticket.id]
+        `,
+        [t.id]
       );
 
-      // Cập nhật phiếu sang closed (nếu không còn chi tiết giữ)
+      // 3) Cập nhật trạng thái phiếu giữ
       await conn.query(
         `
         UPDATE reservation_tickets rt
-        SET rt.status = 'closed'
+        SET rt.status = 'expired'
         WHERE rt.id = ?
-        AND NOT EXISTS (
-          SELECT 1 FROM reservation_details rd
-          WHERE rd.reservation_id = rt.id
-          AND rd.status IN ('pending','on_hold')
-        )
-      `,
-        [ticket.id]
+        `,
+        [t.id]
       );
     }
 
     await conn.commit();
     return {
-      message: `Đã hết hạn ${overdueTickets.length} phiếu giữ quá hạn.`,
+      message: `Đã tự động hết hạn ${tickets.length} phiếu giữ.`,
     };
-  } catch (error) {
+  } catch (err) {
     await conn.rollback();
-    throw error;
+    throw err;
   } finally {
     conn.release();
   }

@@ -278,14 +278,30 @@
  * @swagger
  * /borrows/cron/overdue:
  *   post:
- *     summary: Tự động cập nhật quá hạn các chi tiết mượn (set 'expired' nếu quá hạn)
- *     description: Cập nhật trạng thái chi tiết mượn thành 'expired' nếu quá hạn. Phiếu mượn vẫn giữ nguyên (active) nếu còn chi tiết 'on_loan' hoặc 'expired'.
+ *     summary: Tự động cập nhật quá hạn các chi tiết mượn và phiếu mượn
+ *     description: |
+ *       Chạy cron tự động kiểm tra tất cả phiếu mượn có `due_date` đã quá hạn.
+ *
+ *       Hệ thống sẽ:
+ *       - Cập nhật **borrow_details** ở trạng thái `on_loan` → `expired`
+ *       - Cập nhật **borrow_tickets** tương ứng → `overdue`
+ *       - Đồng bộ lại trạng thái phiếu mượn (nhưng không ghi đè trạng thái `overdue`)
+ *
+ *       ⚠️ Lưu ý:
+ *       - Không cập nhật trạng thái `records` vì sách vẫn đang được người đọc giữ.
+ *       - Chỉ thay đổi trạng thái khi thực sự quá hạn (due_date < hôm nay).
+ *
  *     tags: [Borrows]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Đã cập nhật quá hạn cho các chi tiết mượn
+ *         description: Đã cập nhật quá hạn cho các chi tiết mượn và phiếu mượn
+ *         content:
+ *           application/json:
+ *             example:
+ *               expired_details: 3
+ *               affected_tickets: 2
  *       500:
  *         description: Lỗi hệ thống
  */
@@ -307,8 +323,46 @@ const {
   autoUpdateOverdue,
   getBorrowSummary,
   getBorrowSummaryByBook,
+  getBorrowReportByUsers,
+  getOverdueLostReport,
+  getShelfBookDetails,
+  returnFromLoanItems,
 } = require("../controllers/borrowController");
 
+router.post(
+  "/return-from-loan-items",
+  authToken,
+  permission.isLibrarian,
+  returnFromLoanItems
+);
+
+router.get(
+  "/report/shelf-details",
+  authToken,
+  permission.isLibrarian,
+  getShelfBookDetails
+);
+
+/**
+ * 📊 Báo cáo chi tiết mượn quá hạn & mất
+ * GET /borrows/report/overdue-lost?fromDueDate=YYYY-MM-DD&toDueDate=YYYY-MM-DD
+ */
+router.get(
+  "/report/overdue-lost",
+  authToken,
+  permission.isLibrarian,
+  getOverdueLostReport
+);
+/**
+ * 📊 Báo cáo mượn theo người dùng
+ * GET /borrows/report/by-user?fromDate=2025-01-01&toDate=2025-01-31
+ */
+router.get(
+  "/report/by-user",
+  authToken,
+  permission.isLibrarian,
+  getBorrowReportByUsers
+);
 // Tạo phiếu mượn (thủ thư)
 router.post("/", authToken, permission.isLibrarian, createBorrow);
 
@@ -319,15 +373,15 @@ router.get("/me", authToken, getMyBorrows);
 router.get("/", authToken, permission.isLibrarian, getAllBorrows);
 
 // Thủ thư xem phiếu mượn theo user_id - Must be before /:id
-router.get("/user/:userId", authToken, permission.isLibrarian, getBorrowsByUserId);
-
-// Tóm tắt thống kê mượn (thủ thư) - Must be before /:id
 router.get(
-  "/summary",
+  "/user/:userId",
   authToken,
   permission.isLibrarian,
-  getBorrowSummary
+  getBorrowsByUserId
 );
+
+// Tóm tắt thống kê mượn (thủ thư) - Must be before /:id
+router.get("/summary", authToken, permission.isLibrarian, getBorrowSummary);
 
 // Tóm tắt thống kê mượn theo sách (thủ thư) - Must be before /:id
 router.get(
@@ -354,6 +408,14 @@ router.patch(
   authToken,
   permission.isLibrarian,
   returnAllBooks
+);
+
+// 👇 THÊM MỚI: Trả sách từ danh sách chi tiết mượn (dùng cho auto return sau khi phạt)
+router.post(
+  "/return-from-loan-items",
+  authToken,
+  permission.isLibrarian,
+  returnFromLoanItems
 );
 
 // Cập nhật trạng thái phiếu mượn (thủ thư) - Must be before /:id

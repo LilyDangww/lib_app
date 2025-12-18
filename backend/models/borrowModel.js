@@ -167,9 +167,15 @@ const createBorrow = async (user_id, records) => {
 
 // ============ READ ============
 // Danh sách phiếu mượn
-const getBorrows = async (fromDate, toDate, page = 1, limit = 10, status = null) => {
+const getBorrows = async (
+  fromDate,
+  toDate,
+  page = 1,
+  limit = 10,
+  status = null
+) => {
   const offset = (page - 1) * limit;
-  
+
   // Count total records
   let countQuery = `
     SELECT COUNT(DISTINCT b.id) as total
@@ -187,7 +193,7 @@ const getBorrows = async (fromDate, toDate, page = 1, limit = 10, status = null)
     countQuery += ` AND b.borrow_date <= ?`;
     countParams.push(toDate);
   }
-  
+
   // Filter by status
   if (status === "active") {
     countQuery += ` AND b.status = 'active'`;
@@ -201,7 +207,7 @@ const getBorrows = async (fromDate, toDate, page = 1, limit = 10, status = null)
       AND (bd2.status = 'expired' OR (bd2.status = 'on_loan' AND b.due_date < CURDATE()))
     )`;
   }
-  
+
   const [countResult] = await pool.query(countQuery, countParams);
   const total = countResult[0].total;
   const totalPages = Math.ceil(total / limit);
@@ -236,7 +242,7 @@ const getBorrows = async (fromDate, toDate, page = 1, limit = 10, status = null)
     query += ` AND b.borrow_date <= ?`;
     params.push(toDate);
   }
-  
+
   // Filter by status
   if (status === "active") {
     query += ` AND b.status = 'active'`;
@@ -250,18 +256,18 @@ const getBorrows = async (fromDate, toDate, page = 1, limit = 10, status = null)
       AND (bd2.status = 'expired' OR (bd2.status = 'on_loan' AND b.due_date < CURDATE()))
     )`;
   }
-  
+
   query += ` ORDER BY b.borrow_date DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   const [rows] = await pool.query(query, params);
-  
+
   // Convert is_expired from 0/1 to boolean
-  const data = rows.map(row => ({
+  const data = rows.map((row) => ({
     ...row,
-    is_expired: Boolean(row.is_expired)
+    is_expired: Boolean(row.is_expired),
   }));
-  
+
   return { page, limit, total, totalPages, data };
 };
 
@@ -315,9 +321,15 @@ const getBorrowById = async (id) => {
 };
 
 // Danh sách chi tiết mượn của user hiện thời (ưu tiên chi tiết + thông tin sách/record)
-const getBorrowsByUser = async (userId, fromDate, toDate, page = 1, limit = 10) => {
+const getBorrowsByUser = async (
+  userId,
+  fromDate,
+  toDate,
+  page = 1,
+  limit = 10
+) => {
   const offset = (page - 1) * limit;
-  
+
   // Count total records
   let countSql = `
     SELECT COUNT(bd.id) as total
@@ -378,7 +390,7 @@ const getBorrowsByUser = async (userId, fromDate, toDate, page = 1, limit = 10) 
   params.push(limit, offset);
 
   const [rows] = await pool.query(sql, params);
-  
+
   return {
     page,
     limit,
@@ -397,32 +409,43 @@ const updateBorrowStatus = async (id, status) => {
   ]);
   return getBorrowById(id);
 };
-
-// Auto expire borrow details overdue 35 days (via due_date) and sync ticket status
+// Auto expire borrow details (overdue by due_date)
 const autoUpdateOverdue = async () => {
-  // 1) Mark details expired
+  // 1) Đánh dấu chi tiết mượn quá hạn
   const [res] = await pool.query(`
     UPDATE borrow_details bd
-    JOIN borrow_tickets b ON bd.borrow_id = b.id
+    JOIN borrow_tickets bt ON bt.id = bd.borrow_id
     SET bd.status = 'expired'
-    WHERE bd.status = 'on_loan' AND b.due_date < CURDATE()
+    WHERE bd.status = 'on_loan'
+      AND bt.due_date < CURDATE()
   `);
 
-  // 2) Re-check affected tickets and close when appropriate
-  const [ids] = await pool.query(`
+  // 2) Lấy các borrow_id bị ảnh hưởng
+  const [affected] = await pool.query(`
     SELECT DISTINCT bd.borrow_id
     FROM borrow_details bd
-    JOIN borrow_tickets b ON bd.borrow_id = b.id
-    WHERE b.due_date < CURDATE()
+    JOIN borrow_tickets bt ON bt.id = bd.borrow_id
+    WHERE bt.due_date < CURDATE()
   `);
 
-  for (const row of ids) {
+  // 3) Cập nhật phiếu mượn thành "overdue"
+  await pool.query(
+    `
+    UPDATE borrow_tickets
+    SET status = 'expired'
+    WHERE id IN (?)
+    `,
+    [affected.map((x) => x.borrow_id)]
+  );
+
+  // 4) Đồng bộ lại phiếu mượn (KHÔNG override trạng thái overdue)
+  for (const row of affected) {
     await updateBorrowTicketStatus(row.borrow_id);
   }
 
   return {
     expired_details: res.affectedRows || 0,
-    affected_tickets: ids.length || 0,
+    affected_tickets: affected.length || 0,
   };
 };
 
@@ -436,7 +459,6 @@ const updateBorrowTicketStatus = async (borrowId) => {
       [borrowId]
     );
 
-    // Không có chi tiết -> giữ nguyên
     if (!rows || rows.length === 0) {
       await conn.commit();
       return;
@@ -446,24 +468,28 @@ const updateBorrowTicketStatus = async (borrowId) => {
       (d) => d.status === "returned" || d.status === "lost"
     );
 
+    const hasExpired = rows.some((d) => d.status === "expired");
+    const hasOnLoan = rows.some((d) => d.status === "on_loan");
+
+    let nextStatus;
+
     if (allClosed) {
-      await conn.query(
-        `UPDATE borrow_tickets SET status = 'closed' WHERE id = ?`,
-        [borrowId]
-      );
+      nextStatus = "closed";
+    } else if (hasExpired) {
+      // có bất kỳ chi tiết quá hạn → phiếu quá hạn
+      nextStatus = "expired";
+    } else if (hasOnLoan) {
+      // còn chi tiết đang mượn nhưng chưa quá hạn
+      nextStatus = "active";
     } else {
-      // Chỉ set 'active' nếu khác 'active'
-      const [[ticket]] = await conn.query(
-        `SELECT status FROM borrow_tickets WHERE id = ?`,
-        [borrowId]
-      );
-      if (ticket && ticket.status !== "active") {
-        await conn.query(
-          `UPDATE borrow_tickets SET status = 'active' WHERE id = ?`,
-          [borrowId]
-        );
-      }
+      // fallback (phòng trường hợp có trạng thái khác)
+      nextStatus = "active";
     }
+
+    await conn.query(`UPDATE borrow_tickets SET status = ? WHERE id = ?`, [
+      nextStatus,
+      borrowId,
+    ]);
 
     await conn.commit();
   } catch (e) {
@@ -531,7 +557,9 @@ const markBookAsLost = async (borrowDetailId) => {
     );
     if (!detail) throw new Error("Chi tiết mượn không tồn tại");
     if (detail.status === "returned" || detail.status === "lost")
-      throw new Error("Không thể đánh dấu mất: chi tiết mượn đã được trả hoặc đã được đánh dấu mất");
+      throw new Error(
+        "Không thể đánh dấu mất: chi tiết mượn đã được trả hoặc đã được đánh dấu mất"
+      );
 
     // Cập nhật chi tiết mượn thành "lost"
     await conn.query(
@@ -600,7 +628,9 @@ const returnAllBooks = async (borrowId) => {
 
     // Cập nhật tất cả bản ghi thành 'available'
     await conn.query(
-      `UPDATE records SET status = 'available' WHERE id IN (${recordIds.map(() => "?").join(",")})`,
+      `UPDATE records SET status = 'available' WHERE id IN (${recordIds
+        .map(() => "?")
+        .join(",")})`,
       recordIds
     );
 
@@ -614,6 +644,84 @@ const returnAllBooks = async (borrowId) => {
         recordId: d.record_id,
       })),
       totalReturned: details.length,
+    };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+};
+
+// Trả nhiều sách từ danh sách chi tiết mượn (borrow_detail_id)
+const returnFromLoanItems = async (borrowDetailIds) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    if (!Array.isArray(borrowDetailIds) || borrowDetailIds.length === 0) {
+      throw new Error("borrowDetailIds must be a non-empty array");
+    }
+
+    // Lấy thông tin chi tiết mượn để biết borrow_id + record_id
+    const [details] = await conn.query(
+      `
+      SELECT bd.id, bd.borrow_id, bd.record_id, bd.status
+      FROM borrow_details bd
+      WHERE bd.id IN (${borrowDetailIds.map(() => "?").join(",")})
+      `,
+      borrowDetailIds
+    );
+
+    if (!details || details.length === 0) {
+      throw new Error("Không tìm thấy chi tiết mượn nào");
+    }
+
+    // Lọc chỉ những chi tiết đang mượn / quá hạn
+    const validDetails = details.filter((d) =>
+      ["on_loan", "expired"].includes(d.status)
+    );
+
+    if (validDetails.length === 0) {
+      throw new Error(
+        "Không có chi tiết mượn nào ở trạng thái on_loan hoặc expired để trả"
+      );
+    }
+
+    const validDetailIds = validDetails.map((d) => d.id);
+    const recordIds = validDetails.map((d) => d.record_id);
+    const borrowIds = [...new Set(validDetails.map((d) => d.borrow_id))]; // unique borrow_id
+
+    // Cập nhật borrow_details -> returned
+    await conn.query(
+      `
+      UPDATE borrow_details
+      SET status = 'returned', return_date = CURDATE()
+      WHERE id IN (${validDetailIds.map(() => "?").join(",")})
+      `,
+      validDetailIds
+    );
+
+    // Cập nhật records -> available
+    await conn.query(
+      `
+      UPDATE records
+      SET status = 'available'
+      WHERE id IN (${recordIds.map(() => "?").join(",")})
+      `,
+      recordIds
+    );
+
+    await conn.commit();
+
+    return {
+      borrowIds,
+      returnedDetails: validDetails.map((d) => ({
+        detailId: d.id,
+        borrowId: d.borrow_id,
+        recordId: d.record_id,
+      })),
+      totalReturned: validDetails.length,
     };
   } catch (e) {
     await conn.rollback();
@@ -693,71 +801,410 @@ const getBorrowSummary = async (page, limit) => {
 };
 
 // Lấy tóm tắt thống kê mượn theo sách
-const getBorrowSummaryByBook = async (page, limit) => {
+const getBorrowSummaryByBook = async ({
+  page = 1,
+  limit = 20,
+  fromDate,
+  toDate,
+}) => {
   const offset = (page - 1) * limit;
 
-  // Đếm tổng số sách có được mượn
-  const [countResult] = await pool.query(
-    `
-    SELECT COUNT(DISTINCT d.id) as total
-    FROM documents d
-    INNER JOIN records r ON d.id = r.doc_id
-    INNER JOIN borrow_details bd ON r.id = bd.record_id
-    WHERE d.is_active = 1
-    `
-  );
-  const total = countResult[0].total;
-  const totalPages = Math.ceil(total / limit);
+  let where = "WHERE 1 = 1";
+  const params = [];
+  const countParams = [];
 
-  // Lấy dữ liệu với pagination
-  const [rows] = await pool.query(
-    `
-    SELECT 
-      d.id as book_id,
-      d.name as book_name,
-      d.category_id,
+  if (fromDate) {
+    where += " AND bt.borrow_date >= ?";
+    params.push(fromDate);
+    countParams.push(fromDate);
+  }
+  if (toDate) {
+    where += " AND bt.borrow_date <= ?";
+    params.push(toDate);
+    countParams.push(toDate);
+  }
+
+  // 1) Đếm tổng số đầu sách trong thống kê
+  const countSql = `
+    SELECT COUNT(*) AS total
+    FROM (
+      SELECT d.id
+      FROM borrow_tickets bt
+      JOIN borrow_details bd ON bd.borrow_id = bt.id
+      JOIN records r ON r.id = bd.record_id
+      JOIN documents d ON d.id = r.doc_id
+      LEFT JOIN categories c ON c.id = d.category_id
+      ${where}
+      GROUP BY d.id, d.name, c.id, c.category_name
+    ) AS sub
+  `;
+  const [countRows] = await pool.query(countSql, countParams);
+  const total = countRows[0]?.total || 0;
+  const totalPages = Math.ceil(total / limit) || 1;
+
+  // 2) Lấy dữ liệu phân trang
+  const sql = `
+    SELECT
+      d.id AS book_id,
+      d.name AS book_name,
+      c.id AS category_id,
       c.category_name AS category,
-      COUNT(DISTINCT bd.id) AS total_borrowed_times,
-      COUNT(DISTINCT CASE WHEN bd.status = 'on_loan' THEN bd.id END) AS on_loan_count,
-      COUNT(DISTINCT CASE WHEN bd.status = 'returned' THEN bd.id END) AS returned_count,
-      COUNT(DISTINCT CASE WHEN bd.status = 'expired' THEN bd.id END) AS expired_count,
-      COUNT(DISTINCT CASE WHEN bd.status = 'lost' THEN bd.id END) AS lost_count,
-      COUNT(DISTINCT CASE WHEN b.due_date < CURDATE() AND bd.status = 'on_loan' THEN bd.id END) AS overdue_count,
-      COUNT(DISTINCT bd.borrow_id) AS total_borrow_tickets,
-      COUNT(DISTINCT CASE WHEN b.status = 'active' THEN b.id END) AS active_tickets
-    FROM documents d
-    INNER JOIN records r ON d.id = r.doc_id
-    INNER JOIN borrow_details bd ON r.id = bd.record_id
-    INNER JOIN borrow_tickets b ON bd.borrow_id = b.id
-    LEFT JOIN categories c ON d.category_id = c.id
-    WHERE d.is_active = 1
-    GROUP BY d.id, d.name, d.category_id, c.category_name
-    ORDER BY d.id ASC, d.name ASC
+      COUNT(*) AS total_borrowed_times,
+      SUM(CASE WHEN bd.status = 'on_loan' THEN 1 ELSE 0 END) AS on_loan_count,
+      SUM(CASE WHEN bd.status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
+      SUM(CASE WHEN bd.status = 'expired' THEN 1 ELSE 0 END) AS expired_count,
+      SUM(CASE WHEN bd.status = 'lost' THEN 1 ELSE 0 END) AS lost_count,
+      SUM(
+        CASE
+          WHEN bd.status IN ('on_loan', 'expired')
+           AND bd.due_date < CURRENT_DATE
+          THEN 1 ELSE 0
+        END
+      ) AS overdue_count,
+      COUNT(DISTINCT bt.id) AS total_borrow_tickets,
+      SUM(CASE WHEN bt.status = 'active' THEN 1 ELSE 0 END) AS active_tickets
+    FROM borrow_tickets bt
+    JOIN borrow_details bd ON bd.borrow_id = bt.id
+    JOIN records r ON r.id = bd.record_id
+    JOIN documents d ON d.id = r.doc_id
+    LEFT JOIN categories c ON c.id = d.category_id
+    ${where}
+    GROUP BY d.id, d.name, c.id, c.category_name
+    ORDER BY d.name ASC
     LIMIT ? OFFSET ?
-    `,
-    [limit, offset]
-  );
+  `;
+  params.push(limit, offset);
+
+  const [rows] = await pool.query(sql, params);
 
   return {
     page,
     limit,
     total,
     totalPages,
-    data: rows.map((row) => ({
-      book_id: Number(row.book_id),
-      book_name: row.book_name,
-      category_id: row.category_id ? Number(row.category_id) : null,
-      category: row.category || null,
-      total_borrowed_times: Number(row.total_borrowed_times || 0),
-      on_loan_count: Number(row.on_loan_count || 0),
-      returned_count: Number(row.returned_count || 0),
-      expired_count: Number(row.expired_count || 0),
-      lost_count: Number(row.lost_count || 0),
-      overdue_count: Number(row.overdue_count || 0),
-      total_borrow_tickets: Number(row.total_borrow_tickets || 0),
-      active_tickets: Number(row.active_tickets || 0),
-    })),
+    data: rows,
   };
+};
+
+const getBorrowSummaryByUsers = async ({
+  page = 1,
+  limit = 20,
+  fromDate,
+  toDate,
+  userId, // 👈 thêm
+}) => {
+  const offset = (page - 1) * limit;
+
+  let where = "WHERE 1 = 1";
+  const params = [];
+
+  if (fromDate) {
+    where += " AND bt.borrow_date >= ?";
+    params.push(fromDate);
+  }
+  if (toDate) {
+    where += " AND bt.borrow_date <= ?";
+    params.push(toDate);
+  }
+  if (userId) {
+    where += " AND bt.user_id = ?";
+    params.push(userId);
+  }
+
+  const sql = `
+    SELECT
+      bt.user_id,
+      u.username AS user_name,
+      COUNT(DISTINCT bt.id) AS total_tickets,
+      SUM(CASE WHEN bt.status = 'open' THEN 1 ELSE 0 END) AS active_tickets,
+      SUM(CASE WHEN bt.status = 'closed' THEN 1 ELSE 0 END) AS closed_tickets,
+      COUNT(bd.id) AS total_borrowed_books,
+      SUM(CASE WHEN bd.status = 'on_loan' THEN 1 ELSE 0 END) AS on_loan_count,
+      SUM(CASE WHEN bd.status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
+      SUM(CASE WHEN bd.status = 'expired' THEN 1 ELSE 0 END) AS expired_count,
+      SUM(CASE WHEN bd.status = 'lost' THEN 1 ELSE 0 END) AS lost_count,
+      SUM(
+        CASE
+          WHEN bd.status IN ('on_loan', 'expired')
+           AND bd.due_date < CURRENT_DATE
+          THEN 1 ELSE 0
+        END
+      ) AS overdue_count
+    FROM borrow_tickets bt
+    JOIN users u ON u.id = bt.user_id
+    JOIN borrow_details bd ON bd.borrow_id = bt.id
+    ${where}
+    GROUP BY bt.user_id, u.username
+    ORDER BY u.username ASC
+    LIMIT ? OFFSET ?
+  `;
+  params.push(limit, offset);
+
+  const [rows] = await pool.query(sql, params);
+
+  // ...tính total, totalPages nếu bạn đã có ở đây, đừng quên dùng cùng where + userId...
+
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    data: rows,
+  };
+};
+
+/**
+ * Báo cáo mượn theo người dùng (chi tiết từng sách)
+ * @param {Object} params
+ * @param {string|null} params.fromDate - YYYY-MM-DD
+ * @param {string|null} params.toDate   - YYYY-MM-DD
+ * @param {number|undefined} params.userId
+ * @param {string|undefined} params.bookName
+ */
+const getBorrowReportByUsers = async ({
+  fromDate,
+  toDate,
+  userId,
+  bookName,
+}) => {
+  let sql = `
+    SELECT
+      u.id              AS user_id,
+      u.username,
+      u.email,
+      bt.id             AS borrow_id,
+      d.name            AS book_name,
+      r.barcode,
+      bt.borrow_date,
+      bd.return_date,
+      
+      CASE
+        WHEN bd.status = 'lost' THEN 'lost'
+        WHEN bd.return_date IS NOT NULL THEN 'returned'
+        WHEN bd.due_date < CURRENT_DATE AND bd.return_date IS NULL
+          THEN 'overdue'
+        ELSE 'borrowing'
+      END AS status,
+
+      CASE
+        WHEN bd.due_date < CURRENT_DATE AND bd.return_date IS NULL
+          THEN DATEDIFF(CURRENT_DATE, bd.due_date)
+        ELSE 0
+      END AS overdue_days
+
+    FROM borrow_tickets bt
+    JOIN users u ON bt.user_id = u.id
+    JOIN borrow_details bd ON bt.id = bd.borrow_id
+    JOIN records r ON bd.record_id = r.id
+    JOIN documents d ON r.doc_id = d.id
+    WHERE 1 = 1
+  `;
+
+  const params = [];
+
+  if (fromDate) {
+    sql += " AND bt.borrow_date >= ?";
+    params.push(fromDate);
+  }
+
+  if (toDate) {
+    sql += " AND bt.borrow_date <= ?";
+    params.push(toDate);
+  }
+
+  if (userId) {
+    sql += " AND bt.user_id = ?";
+    params.push(userId);
+  }
+
+  // 👇 thêm lọc theo đầu sách (tên sách)
+  if (bookName) {
+    sql += " AND d.name LIKE ?";
+    params.push(`%${bookName}%`);
+  }
+
+  sql += " ORDER BY u.username, bt.borrow_date DESC, bd.id";
+
+  const [rows] = await pool.query(sql, params);
+  return rows;
+};
+
+/**
+ * Báo cáo chi tiết mượn quá hạn & mất + thông tin phạt
+ *
+ * - Nhóm 1: chi tiết mượn đang QUÁ HẠN CHƯA PHẠT
+ *    bd.status = 'on_loan' AND bd.due_date < CURRENT_DATE
+ *    (fd có thể null hoặc không, nhưng nếu null thì chắc chắn chưa phạt)
+ *
+ * - Nhóm 2: chi tiết mượn ĐÃ CÓ PHIẾU PHẠT (paid/unpaid)
+ *    fd.id IS NOT NULL
+ *
+ * - overdue_days:
+ *    + lost: 0
+ *    + fd.id NOT NULL: DATEDIFF(DATE(ft.issued_date), bd.due_date)
+ *    + fd.id IS NULL & on_loan & quá hạn: DATEDIFF(CURRENT_DATE, bd.due_date)
+ */
+const getOverdueLostReport = async () => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      u.id            AS user_id,
+      u.username      AS username,
+      bt.id           AS borrow_id,
+      d.name          AS book_name,
+      r.barcode       AS barcode,
+      bt.borrow_date,
+      bd.due_date,
+      bd.return_date,
+
+      -- Lý do (cho FE nếu cần)
+      CASE
+        WHEN bd.status = 'lost' THEN 'lost'
+        WHEN bd.status = 'on_loan' AND bd.due_date < CURRENT_DATE THEN 'overdue'
+        ELSE 'other'
+      END AS reason,
+
+      -- Số ngày quá hạn:
+      --  lost: 0
+      --  đã phạt: ngày lập phiếu - hạn
+      --  chưa phạt & đang mượn/đã expired & quá hạn: hôm nay - hạn
+      CASE
+        WHEN bd.status = 'lost' THEN 0
+
+        -- ĐÃ CÓ PHIẾU PHẠT: dùng ngày lập phiếu - hạn
+        WHEN fd.id IS NOT NULL
+          THEN GREATEST(
+                 DATEDIFF(
+                   DATE(ft.issued_date),
+                   bd.due_date
+                 ),
+                 0
+               )
+
+        -- CHƯA PHẠT & đang mượn / expired & quá hạn: hôm nay - hạn
+        WHEN fd.id IS NULL
+         AND bd.status IN ('on_loan', 'expired')
+         AND bd.due_date < CURRENT_DATE
+          THEN GREATEST(
+                 DATEDIFF(
+                   CURRENT_DATE,
+                   bd.due_date
+                 ),
+                 0
+               )
+
+        ELSE 0
+      END AS overdue_days,
+
+      -- Thông tin phiếu phạt (nếu có)
+      fd.id           AS fine_detail_id,
+      fd.amount       AS fine_amount,
+      ft.id           AS fine_ticket_id,
+      ft.status       AS fine_status
+
+    FROM borrow_details bd
+    JOIN borrow_tickets bt ON bd.borrow_id = bt.id
+    JOIN users u           ON bt.user_id = u.id
+    JOIN records r         ON bd.record_id = r.id
+    JOIN documents d       ON r.doc_id = d.id
+
+    LEFT JOIN fines_detail fd
+      ON fd.loan_item_id = bd.id
+    LEFT JOIN fine_tickets ft
+      ON ft.id = fd.fine_id
+
+    WHERE
+      (
+        -- Nhóm 1: đang mượn và quá hạn (kể cả đã/ chưa phạt)
+        bd.status = 'expired'
+        AND bd.due_date < CURRENT_DATE
+      )
+      OR
+      (
+        -- Nhóm 2: đã có phiếu phạt (lost / returned / on_loan / expired)
+        fd.id IS NOT NULL
+      )
+      OR
+      (
+        -- Nhóm 3: lost (nếu bạn muốn luôn thấy bản mất trong báo cáo phạt)
+        bd.status = 'lost'
+      )
+
+    ORDER BY
+      bd.due_date ASC,
+      u.username ASC,
+      d.name ASC
+    `
+  );
+
+  return rows;
+};
+
+/**
+ * Báo cáo chi tiết từng bản ghi theo kệ (snapshot hiện tại, không lọc ngày)
+ *
+ * Trả về:
+ * - shelf_id: id kệ (location_id)
+ * - shelf_code: tên/mã kệ (location.location)
+ * - doc_id: Mã đầu sách
+ * - doc_name: Tên sách
+ * - barcode: barcode bản ghi
+ * - condition_note: ghi chú tình trạng
+ * - state: 'borrowed' | 'holding' | 'lost' | 'damaged' | 'available'
+ * - borrow_ticket_id: nếu đang mượn / mất
+ * - hold_ticket_id: nếu đang giữ
+ */
+const getShelfBookDetails = async () => {
+  const sql = `
+    SELECT
+      loc.id          AS shelf_id,
+      loc.location    AS shelf_code,
+      d.id            AS doc_id,
+      d.name          AS doc_name,
+      r.barcode       AS barcode,
+      r.condition_note AS condition_note,
+
+      CASE
+        WHEN bd_active.id IS NOT NULL AND bd_active.status IN ('on_loan', 'expired')
+          THEN 'borrowed'
+        WHEN bd_lost.id IS NOT NULL
+          THEN 'lost'
+        WHEN hd_active.id IS NOT NULL
+          THEN 'holding'
+        ELSE 'available'
+      END AS state,
+
+      bt_active.id    AS borrow_ticket_id,
+      ht_active.id    AS hold_ticket_id
+
+    FROM records r
+    JOIN documents d      ON r.doc_id = d.id
+    LEFT JOIN locations loc ON r.location_id = loc.id
+
+    -- Chi tiết mượn đang còn hiệu lực (chưa trả)
+    LEFT JOIN borrow_details bd_active
+      ON bd_active.record_id = r.id
+      AND bd_active.status IN ('on_loan', 'expired')
+    LEFT JOIN borrow_tickets bt_active
+      ON bd_active.borrow_id = bt_active.id
+
+    -- Chi tiết mượn bị mất
+    LEFT JOIN borrow_details bd_lost
+      ON bd_lost.record_id = r.id
+      AND bd_lost.status = 'lost'
+
+    -- Phiếu giữ đang hiệu lực (đổi tên bảng/cột nếu khác)
+    LEFT JOIN reservation_details hd_active
+      ON hd_active.record_id = r.id
+      AND hd_active.status = 'on_hold'
+    LEFT JOIN reservation_tickets ht_active
+      ON hd_active.reservation_id = ht_active.id
+
+    WHERE r.is_active = 1
+  `;
+
+  const [rows] = await pool.query(sql);
+  return rows;
 };
 
 module.exports = {
@@ -774,4 +1221,9 @@ module.exports = {
   getBorrowsByUser,
   getBorrowSummary,
   getBorrowSummaryByBook,
+  getBorrowSummaryByUsers,
+  getBorrowReportByUsers,
+  getShelfBookDetails,
+  getOverdueLostReport,
+  returnFromLoanItems,
 };

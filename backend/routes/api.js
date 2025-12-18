@@ -27,10 +27,5 @@ router.use("/fines", require("./finesRoutes"));
 router.use("/dashboard", require("./dashboardRoutes"));
 router.use("/categories", require("./categoryRoutes"));
 
-// router.use("/inventory", require("./inventoryRoutes"));
-
-// Sau này có thêm:
-// const userRoutes = require("./userRoutes");
-// router.use("/users", userRoutes);
 
 module.exports = router;

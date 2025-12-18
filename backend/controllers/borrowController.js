@@ -40,7 +40,13 @@ const getMyBorrows = async (req, res) => {
     const { fromDate, toDate } = req.query;
 
     // Lấy theo chi tiết mượn + thông tin sách/record (no pagination limit for user's own borrows)
-    const result = await Borrow.getBorrowsByUser(req.user.id, fromDate, toDate, 1, 1000);
+    const result = await Borrow.getBorrowsByUser(
+      req.user.id,
+      fromDate,
+      toDate,
+      1,
+      1000
+    );
 
     const mapped = result.data.map((r) => ({
       ...r,
@@ -60,12 +66,19 @@ const getAllBorrows = async (req, res) => {
     const { fromDate, toDate, page = 1, limit = 10, status } = req.query;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
-    
+
     // Validate status filter
     const validStatuses = ["active", "closed", "expired"];
-    const statusFilter = status && validStatuses.includes(status) ? status : null;
-    
-    const result = await Borrow.getBorrows(fromDate, toDate, pageNum, limitNum, statusFilter);
+    const statusFilter =
+      status && validStatuses.includes(status) ? status : null;
+
+    const result = await Borrow.getBorrows(
+      fromDate,
+      toDate,
+      pageNum,
+      limitNum,
+      statusFilter
+    );
 
     const mapped = result.data.map((r) => ({
       ...r,
@@ -74,7 +87,7 @@ const getAllBorrows = async (req, res) => {
 
     res.json({
       ...result,
-      data: mapped
+      data: mapped,
     });
   } catch (error) {
     console.error("❌ Error getAllBorrows:", error);
@@ -90,7 +103,13 @@ const getBorrowsByUserId = async (req, res) => {
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
 
-    const result = await Borrow.getBorrowsByUser(userId, fromDate, toDate, pageNum, limitNum);
+    const result = await Borrow.getBorrowsByUser(
+      userId,
+      fromDate,
+      toDate,
+      pageNum,
+      limitNum
+    );
 
     const mapped = result.data.map((r) => ({
       ...r,
@@ -137,9 +156,9 @@ const returnAllBooks = async (req, res) => {
     const { id } = req.params; // borrow_id
     const result = await Borrow.returnAllBooks(id);
     await Borrow.updateBorrowTicketStatus(result.borrowId);
-    res.json({ 
-      message: `Trả thành công ${result.totalReturned} quyển sách`, 
-      ...result 
+    res.json({
+      message: `Trả thành công ${result.totalReturned} quyển sách`,
+      ...result,
     });
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -209,14 +228,130 @@ const getBorrowSummary = async (req, res) => {
 // ================== Lấy tóm tắt thống kê mượn theo sách ==================
 const getBorrowSummaryByBook = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const { page = 1, limit = 20, fromDate, toDate } = req.query;
 
-    const summary = await Borrow.getBorrowSummaryByBook(page, limit);
-    res.json(summary);
+    const data = await Borrow.getBorrowSummaryByBook({
+      page: Number(page),
+      limit: Number(limit),
+      fromDate: fromDate || null,
+      toDate: toDate || null,
+      // KHÔNG truyền userId ở đây
+    });
+
+    res.json(data);
   } catch (error) {
-    console.error("Error fetching borrow summary by book:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("getBorrowSummaryByBook error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Báo cáo mượn sách theo người dùng
+const getBorrowReportByUsers = async (req, res) => {
+  try {
+    const { fromDate, toDate, userId, bookName } = req.query;
+
+    const rows = await Borrow.getBorrowReportByUsers({
+      fromDate: fromDate || null,
+      toDate: toDate || null,
+      userId: userId ? Number(userId) : undefined,
+      bookName: bookName && bookName.trim() ? bookName.trim() : undefined,
+    });
+
+    res.json(rows);
+  } catch (err) {
+    console.error("getBorrowReportByUsers error:", err);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
+// const getOverdueAndLostReport = async (req, res) => {
+//   try {
+//     const { fromDueDate = null, toDueDate = null } = req.query;
+
+//     const rows = await Borrow.getOverdueAndLostReport({
+//       fromDueDate,
+//       toDueDate,
+//     });
+
+//     res.json(rows);
+//   } catch (error) {
+//     console.error("getOverdueAndLostReport error:", error);
+//     res.status(500).json({ message: error.message });
+//   }
+// };
+
+const getOverdueLostReport = async (req, res) => {
+  try {
+    const { fromDueDate, toDueDate } = req.query;
+
+    const rows = await Borrow.getOverdueLostReport({
+      fromDueDate: fromDueDate || null,
+      toDueDate: toDueDate || null,
+    });
+
+    res.json(rows);
+  } catch (err) {
+    console.error("getOverdueLostReport error:", err);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
+const getShelfBookDetails = async (req, res) => {
+  try {
+    const rows = await Borrow.getShelfBookDetails();
+    res.json(rows);
+  } catch (error) {
+    console.error("getShelfBookDetails error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getBorrowSummaryByUsers = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, fromDate, toDate, userId } = req.query;
+
+    const data = await Borrow.getBorrowSummaryByUsers({
+      page: Number(page),
+      limit: Number(limit),
+      fromDate: fromDate || null,
+      toDate: toDate || null,
+      userId: userId ? Number(userId) : undefined,
+    });
+
+    res.json(data);
+  } catch (error) {
+    console.error("getBorrowSummaryByUsers error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Trả nhiều sách từ danh sách chi tiết mượn (dùng sau khi tạo phiếu phạt)
+const returnFromLoanItems = async (req, res) => {
+  try {
+    const { loan_items } = req.body; // mảng borrow_detail_id
+
+    if (!Array.isArray(loan_items) || loan_items.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "loan_items must be a non-empty array" });
+    }
+
+    const result = await Borrow.returnFromLoanItems(loan_items);
+
+    // Cập nhật trạng thái phiếu mượn cho các borrow_id liên quan
+    if (result.borrowIds && result.borrowIds.length > 0) {
+      for (const borrowId of result.borrowIds) {
+        await Borrow.updateBorrowTicketStatus(borrowId);
+      }
+    }
+
+    res.json({
+      message: `Trả thành công ${result.totalReturned} chi tiết mượn`,
+      ...result,
+    });
+  } catch (error) {
+    console.error("❌ Error returnFromLoanItems:", error);
+    res.status(400).json({ message: error.message });
   }
 };
 
@@ -233,4 +368,9 @@ module.exports = {
   autoUpdateOverdue,
   getBorrowSummary,
   getBorrowSummaryByBook,
+  getBorrowSummaryByUsers,
+  getBorrowReportByUsers,
+  getOverdueLostReport,
+  getShelfBookDetails,
+  returnFromLoanItems,
 };

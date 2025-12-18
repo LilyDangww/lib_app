@@ -387,6 +387,17 @@ const getDocumentById = async (id) => {
     [id]
   );
 
+  // 4b) Tổng số lượt mượn (đếm tất cả borrow_details của doc)
+  const [[borrowAgg]] = await pool.query(
+    `
+    SELECT COUNT(*) AS total_borrowed
+    FROM records r
+    JOIN borrow_details bd ON bd.record_id = r.id
+    WHERE r.doc_id = ?
+    `,
+    [id]
+  );
+
   // 5) Thống kê rating (reviews via borrow_details)
   const [[ratingAgg]] = await pool.query(
     `
@@ -442,6 +453,8 @@ const getDocumentById = async (id) => {
       available_count: Number(counts?.available_count || 0),
       avg_rating: Number(ratingAgg?.avg_rating || 0),
       review_count: Number(ratingAgg?.review_count || 0),
+      // 👇 thêm tổng lượt mượn
+      borrow_count: Number(borrowAgg?.total_borrowed || 0),
     },
     records, // [{id, barcode, status}]
     reviews: reviews.map((r) => ({
@@ -738,6 +751,30 @@ const getBookSummary = async (page, limit) => {
   };
 };
 
+const getRelatedBooks = async ({ categoryId, excludeId, limit = 6 }) => {
+  let sql = `
+    SELECT
+      d.id,
+      d.name,
+      d.image_url,
+      d.category_id
+    FROM documents d
+    WHERE d.category_id = ?
+  `;
+  const params = [categoryId];
+
+  if (excludeId) {
+    sql += " AND d.id <> ?";
+    params.push(excludeId);
+  }
+
+  sql += " ORDER BY d.id DESC LIMIT ?";
+  params.push(Number(limit) || 6);
+
+  const [rows] = await pool.query(sql, params);
+  return rows;
+};
+
 module.exports = {
   addDocument,
   getDocumentsForReaders,
@@ -751,4 +788,5 @@ module.exports = {
   getAuthors,
   getLocations,
   getBookSummary,
+  getRelatedBooks, // added
 };

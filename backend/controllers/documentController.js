@@ -159,9 +159,14 @@ const updateDocument = async (req, res) => {
       category_id: normalizedCategoryId,
       page_nums: normalizeNullableNumber(page_nums),
       description: normalizeNullableString(description),
-      image_url: image_url === undefined ? undefined : normalizeNullableString(image_url),
+      image_url:
+        image_url === undefined
+          ? undefined
+          : normalizeNullableString(image_url),
       cloudinary_id:
-        cloudinary_id === undefined ? undefined : normalizeNullableString(cloudinary_id),
+        cloudinary_id === undefined
+          ? undefined
+          : normalizeNullableString(cloudinary_id),
       author_ids: normalizedAuthorIds,
     });
 
@@ -422,7 +427,9 @@ const addRecordsBulk = async (req, res) => {
     // Partial success or full success
     const statusCode = result.failed > 0 ? 207 : 201; // 207 Multi-Status for partial success
     res.status(statusCode).json({
-      message: `Đã tạo thành công ${result.success} bản ghi${result.failed > 0 ? `, ${result.failed} bản ghi thất bại` : ""}`,
+      message: `Đã tạo thành công ${result.success} bản ghi${
+        result.failed > 0 ? `, ${result.failed} bản ghi thất bại` : ""
+      }`,
       ...result,
     });
   } catch (error) {
@@ -458,7 +465,9 @@ const changeRecordStatus = async (req, res) => {
     // Validate status value
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
-        message: `Invalid status. Valid statuses are: ${validStatuses.join(", ")}`,
+        message: `Invalid status. Valid statuses are: ${validStatuses.join(
+          ", "
+        )}`,
       });
     }
 
@@ -484,6 +493,28 @@ const changeRecordStatus = async (req, res) => {
   }
 };
 
+//===========================================================================================
+// Lấy danh sách sách liên quan
+const getRelatedBooks = async (req, res) => {
+  try {
+    const { categoryId, excludeId, limit } = req.query;
+    if (!categoryId) {
+      return res.status(400).json({ message: "categoryId is required" });
+    }
+
+    const books = await Document.getRelatedBooks({
+      categoryId: Number(categoryId),
+      excludeId: excludeId ? Number(excludeId) : undefined,
+      limit: limit ? Number(limit) : 6,
+    });
+
+    res.json(books);
+  } catch (err) {
+    console.error("getRelatedBooks error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   addDocument,
   updateDocument,
@@ -500,4 +531,5 @@ module.exports = {
   getBookSummary,
   addRecordsBulk,
   changeRecordStatus,
+  getRelatedBooks,
 };

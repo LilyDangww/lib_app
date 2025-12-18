@@ -16,29 +16,18 @@ const Fines = {
 
     if (!row || row.days_late === 0) return { amount: 0, days_late: 0 };
 
-    const [[rule]] = await pool.query(
-      `
-      SELECT *
-      FROM overdue_rules
-      WHERE is_active = 1
-      AND ? >= days_min
-      AND (days_max IS NULL OR ? <= days_max)
-      ORDER BY days_min DESC
-      LIMIT 1
-      `,
-      [row.days_late, row.days_late]
-    );
+    const amount = row.days_late * 1000; // 1.000đ / ngày
 
-    const amount =
-      rule.mode === "per_day"
-        ? rule.per_day_amount * row.days_late
-        : rule.flat_amount;
-
-    return { amount, days_late: row.days_late, rule };
+    return { amount, days_late: row.days_late, rule: null };
   },
 
   // 🔥 Tạo phiếu phạt từ loan_item_id
-  async createFineFromLoanItem(loan_item_id, reason, providedAmount = null, providedOverdueDays = null) {
+  async createFineFromLoanItem(
+    loan_item_id,
+    reason,
+    providedAmount = null,
+    providedOverdueDays = null
+  ) {
     const conn = await pool.getConnection();
 
     try {
@@ -73,43 +62,25 @@ const Fines = {
       let meta = {};
       let reason_id = null;
 
-      // 2️⃣ nếu quá hạn → tính tiền
       if (reason === "overdue") {
-        // Use provided values if available, otherwise calculate
-        if (providedAmount !== null && providedAmount !== undefined && providedOverdueDays !== null && providedOverdueDays !== undefined) {
+        if (
+          providedAmount !== null &&
+          providedAmount !== undefined &&
+          providedOverdueDays !== null &&
+          providedOverdueDays !== undefined
+        ) {
+          // FE đã tính sẵn: dùng luôn
           amount = providedAmount;
           const overdueDays = providedOverdueDays;
-          
-          // Try to get the rule that matches the overdue days
-          const [[rule]] = await conn.query(
-            `
-            SELECT *
-            FROM overdue_rules
-            WHERE is_active = 1
-            AND ? >= days_min
-            AND (days_max IS NULL OR ? <= days_max)
-            ORDER BY days_min DESC
-            LIMIT 1
-            `,
-            [overdueDays, overdueDays]
-          );
-          
-          if (rule) {
-            meta = { days_late: overdueDays, rule: rule.id };
-          } else {
-            meta = { days_late: overdueDays };
-          }
+          meta = { days_late: overdueDays }; // không cần rule
         } else {
-          // Fall back to calculation if values not provided
+          // fallback: tự tính đơn giản: days * 1000
           const overdue = await this.calculateOverdueAmount(loan_item_id);
-          amount = overdue.amount;
-          meta = { days_late: overdue.days_late, rule: overdue.rule.id };
+          amount = overdue.days_late * 1000;
+          meta = { days_late: overdue.days_late };
         }
-        reason_id = 1; // ví dụ reason_id = 1 = quá hạn
-      }
-
-      // 3️⃣ nếu mất sách → lấy phí thay thế (nếu có trong database, nếu không thì dùng giá trị mặc định)
-      else if (reason === "lost") {
+        reason_id = 1;
+      } else if (reason === "lost") {
         // Thử lấy replacement_cost nếu column tồn tại
         try {
           const [[lostRule]] = await conn.query(
@@ -125,7 +96,6 @@ const Fines = {
         reason_id = 2; // 2 = mất sách
       }
 
-      // 4️⃣ tạo chi tiết phạt
       await conn.query(
         `
         INSERT INTO fines_detail (fine_id, loan_item_id, reason_id, amount, meta)
@@ -181,7 +151,9 @@ const Fines = {
         loanItemIds
       );
 
-      const differentUserItems = allItems.filter((item) => item.user_id !== user_id);
+      const differentUserItems = allItems.filter(
+        (item) => item.user_id !== user_id
+      );
       if (differentUserItems.length > 0) {
         throw new Error("All loan items must belong to the same user");
       }
@@ -218,33 +190,18 @@ const Fines = {
           throw new Error(`Loan item ${loan_item_id} not found`);
         }
 
-        // Build meta based on reason
+        // Build meta based on reason - KHÔNG DÙNG overdue_rules
         let meta = {};
-        if (reason === "overdue" && overdue_days !== null && overdue_days !== undefined) {
-          // Try to get the rule that matches the overdue days
-          const [[rule]] = await conn.query(
-            `
-            SELECT *
-            FROM overdue_rules
-            WHERE is_active = 1
-            AND ? >= days_min
-            AND (days_max IS NULL OR ? <= days_max)
-            ORDER BY days_min DESC
-            LIMIT 1
-            `,
-            [overdue_days, overdue_days]
-          );
-
-          if (rule) {
-            meta = { days_late: overdue_days, rule: rule.id };
-          } else {
-            meta = { days_late: overdue_days };
-          }
+        if (
+          reason === "overdue" &&
+          overdue_days !== null &&
+          overdue_days !== undefined
+        ) {
+          meta = { days_late: overdue_days };
         } else if (reason === "lost") {
           meta = { lost: true };
         }
 
-        // Insert fine detail
         await conn.query(
           `
           INSERT INTO fines_detail (fine_id, loan_item_id, reason_id, amount, meta)
@@ -265,14 +222,22 @@ const Fines = {
   },
 
   // 🔥 Tạo phiếu phạt trực tiếp với user_id, record_id, reason, amount
-  async createFineDirect(user_id, record_id, reason, amount, overdueDays = null) {
+  async createFineDirect(
+    user_id,
+    record_id,
+    reason,
+    amount,
+    overdueDays = null
+  ) {
     const conn = await pool.getConnection();
 
     try {
       await conn.beginTransaction();
 
       // Kiểm tra user và record tồn tại
-      const [[user]] = await conn.query(`SELECT id FROM users WHERE id = ?`, [user_id]);
+      const [[user]] = await conn.query(`SELECT id FROM users WHERE id = ?`, [
+        user_id,
+      ]);
       if (!user) throw new Error("User not found");
 
       const [[record]] = await conn.query(
@@ -289,32 +254,13 @@ const Fines = {
       let meta = {};
 
       if (reason === "overdue") {
-        reason_id = 1; // 1 = quá hạn
+        reason_id = 1;
         if (overdueDays !== null && overdueDays > 0) {
-          // Tính tiền theo overdue_rules nếu có
-          const [[rule]] = await conn.query(
-            `
-            SELECT *
-            FROM overdue_rules
-            WHERE is_active = 1
-            AND ? >= days_min
-            AND (days_max IS NULL OR ? <= days_max)
-            ORDER BY days_min DESC
-            LIMIT 1
-            `,
-            [overdueDays, overdueDays]
-          );
-
-          if (rule) {
-            const calculatedAmount =
-              rule.mode === "per_day"
-                ? rule.per_day_amount * overdueDays
-                : rule.flat_amount;
-            amount = calculatedAmount;
-            meta = { days_late: overdueDays, rule: rule.id };
-          } else {
-            meta = { days_late: overdueDays };
+          // FE có thể gửi sẵn amount; hoặc nếu không gửi, tự set = overdueDays * 1000
+          if (!amount || amount === 0) {
+            amount = overdueDays * 1000;
           }
+          meta = { days_late: overdueDays };
         } else {
           meta = { days_late: overdueDays || 0 };
         }
@@ -390,7 +336,14 @@ const Fines = {
           INSERT INTO fines_detail (fine_id, loan_item_id, reason_id, amount, meta, record_id)
           VALUES (?, ?, ?, ?, ?, ?)
           `,
-          [fine_id, loan_item_id, reason_id, amount, JSON.stringify(meta), record_id]
+          [
+            fine_id,
+            loan_item_id,
+            reason_id,
+            amount,
+            JSON.stringify(meta),
+            record_id,
+          ]
         );
       } catch (err) {
         // Nếu record_id column không tồn tại, insert không có record_id
@@ -514,8 +467,9 @@ const Fines = {
       reason: row.reason_label || "Quá hạn",
       overdueDays: row.overdue_days ? parseInt(row.overdue_days) : null,
       amount: row.amount ? parseFloat(row.amount) : null,
-      paymentStatus: row.status === "paid" ? "Đã thanh toán" : "Chưa thanh toán",
-      creationDate: row.issued_date 
+      paymentStatus:
+        row.status === "paid" ? "Đã thanh toán" : "Chưa thanh toán",
+      creationDate: row.issued_date
         ? new Date(row.issued_date).toLocaleDateString("vi-VN")
         : "",
       totalAmount: row.total_amount ? parseFloat(row.total_amount) : null,
@@ -546,10 +500,10 @@ const Fines = {
       }
 
       // Cập nhật trạng thái phiếu phạt
-      await conn.query(
-        `UPDATE fine_tickets SET status = ? WHERE id = ?`,
-        [status, fine_id]
-      );
+      await conn.query(`UPDATE fine_tickets SET status = ? WHERE id = ?`, [
+        status,
+        fine_id,
+      ]);
 
       // Nếu đánh dấu là đã thanh toán, cập nhật trạng thái borrow_details và records
       if (status === "paid") {
@@ -564,11 +518,15 @@ const Fines = {
 
           // Lấy record_ids từ borrow_details
           const [borrowDetails] = await conn.query(
-            `SELECT DISTINCT record_id FROM borrow_details WHERE id IN (${loanItemIds.map(() => "?").join(",")})`,
+            `SELECT DISTINCT record_id FROM borrow_details WHERE id IN (${loanItemIds
+              .map(() => "?")
+              .join(",")})`,
             loanItemIds
           );
 
-          const recordIds = borrowDetails.map((bd) => bd.record_id).filter((id) => id !== null);
+          const recordIds = borrowDetails
+            .map((bd) => bd.record_id)
+            .filter((id) => id !== null);
 
           // Cập nhật borrow_details: status = 'returned', return_date = NOW()
           if (loanItemIds.length > 0) {
@@ -583,7 +541,9 @@ const Fines = {
           // Cập nhật records: status = 'available'
           if (recordIds.length > 0) {
             await conn.query(
-              `UPDATE records SET status = 'available' WHERE id IN (${recordIds.map(() => "?").join(",")})`,
+              `UPDATE records SET status = 'available' WHERE id IN (${recordIds
+                .map(() => "?")
+                .join(",")})`,
               recordIds
             );
           }
@@ -617,16 +577,10 @@ const Fines = {
       }
 
       // Xóa chi tiết phạt trước (foreign key constraint)
-      await conn.query(
-        `DELETE FROM fines_detail WHERE fine_id = ?`,
-        [fine_id]
-      );
+      await conn.query(`DELETE FROM fines_detail WHERE fine_id = ?`, [fine_id]);
 
       // Xóa phiếu phạt
-      await conn.query(
-        `DELETE FROM fine_tickets WHERE id = ?`,
-        [fine_id]
-      );
+      await conn.query(`DELETE FROM fine_tickets WHERE id = ?`, [fine_id]);
 
       await conn.commit();
       return true;

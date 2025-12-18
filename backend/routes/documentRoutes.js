@@ -287,8 +287,10 @@ const {
   getBookSummary,
   addRecordsBulk,
   changeRecordStatus,
+  getRelatedBooks,
 } = require("../controllers/documentController");
 
+router.get("/related", getRelatedBooks); // Sách liên quan (public)
 // LIST routes (cụ thể) luôn trước route động :id
 router.get(
   "/librarians",
@@ -296,12 +298,7 @@ router.get(
   permission.isLibrarian,
   getDocumentsForLibrarians
 );
-router.get(
-  "/summary",
-  authToken,
-  permission.isLibrarian,
-  getBookSummary
-);
+router.get("/summary", authToken, permission.isLibrarian, getBookSummary);
 router.get("/", getDocumentsForReaders);
 router.get("/readers", getDocumentsForReaders); // giữ lộ trình cũ để tránh phá vỡ client đang dùng
 
@@ -309,18 +306,8 @@ router.get("/readers", getDocumentsForReaders); // giữ lộ trình cũ để t
 router.get("/categories/public", getCategories);
 
 // Thêm mới / sửa / xóa
-router.post(
-  "/",
-  authToken,
-  permission.isLibrarian,
-  addDocument
-);
-router.put(
-  "/:id",
-  authToken,
-  permission.isLibrarian,
-  updateDocument
-);
+router.post("/", authToken, permission.isLibrarian, addDocument);
+router.put("/:id", authToken, permission.isLibrarian, updateDocument);
 router.delete("/:id", authToken, permission.isLibrarian, deleteDocument);
 
 router.post(
@@ -331,41 +318,16 @@ router.post(
   importDocuments
 );
 
-router.get(
-  "/categories",
-  authToken,
-  permission.isLibrarian,
-  getCategories
-);
+router.get("/categories", authToken, permission.isLibrarian, getCategories);
 
-router.get(
-  "/publishers",
-  authToken,
-  permission.isLibrarian,
-  getPublishers
-);
+router.get("/publishers", authToken, permission.isLibrarian, getPublishers);
 
-router.get(
-  "/authors",
-  authToken,
-  permission.isLibrarian,
-  getAuthors
-);
+router.get("/authors", authToken, permission.isLibrarian, getAuthors);
 
-router.get(
-  "/locations",
-  authToken,
-  permission.isLibrarian,
-  getLocations
-);
+router.get("/locations", authToken, permission.isLibrarian, getLocations);
 
 // Thêm nhiều bản ghi cho nhiều sách (phải đặt trước /:id)
-router.post(
-  "/records/bulk",
-  authToken,
-  permission.isLibrarian,
-  addRecordsBulk
-);
+router.post("/records/bulk", authToken, permission.isLibrarian, addRecordsBulk);
 
 // Lấy danh sách records của một document (phải đặt trước /:id)
 router.get(
