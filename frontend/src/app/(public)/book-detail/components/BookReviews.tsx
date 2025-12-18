@@ -12,6 +12,13 @@ export default function BookReviews({ book }: BookReviewsProps) {
   const [userRating, setUserRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
 
+  const formatDate = (value?: string | null) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("vi-VN");
+  };
+
   const renderStars = (rating: number) => {
     const stars = [];
     for (let i = 1; i <= 5; i++) {
@@ -91,7 +98,11 @@ export default function BookReviews({ book }: BookReviewsProps) {
                   <div className="font-medium text-gray-800">
                     {review.userName}
                   </div>
-                  <div className="text-sm text-gray-500">{review.date}</div>
+                  {review.date && (
+                    <div className="text-sm text-gray-500">
+                      {formatDate(review.date)}
+                    </div>
+                  )}
                 </div>
                 <div className="flex ml-auto">
                   {Array.from({ length: 5 }, (_, i) => (

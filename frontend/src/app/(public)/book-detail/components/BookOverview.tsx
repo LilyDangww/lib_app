@@ -120,6 +120,7 @@ export default function BookOverview({ book }: BookOverviewProps) {
 
         {/* Rating and Stats */}
         <div className="flex items-center gap-6 mb-6">
+          {/* Rating + số đánh giá */}
           <div className="flex items-center gap-2">
             <div className="flex">{renderStars(book.rating)}</div>
             <span className="text-gray-700 font-medium">
@@ -127,40 +128,14 @@ export default function BookOverview({ book }: BookOverviewProps) {
             </span>
           </div>
 
+          {/* Chỉ hiển thị lượt mượn */}
           <div className="flex items-center gap-2 text-gray-600">
             <svg
               className="w-5 h-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
-              aria-label="Eye icon"
-              role="img"
             >
-              <title>Lượt xem</title>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-              />
-            </svg>
-            <span>{book.viewCount.toLocaleString()} lượt xem</span>
-          </div>
-          <div className="flex items-center gap-2 text-gray-600">
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-label="Book icon"
-            >
-              <title>Book icon</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -168,7 +143,7 @@ export default function BookOverview({ book }: BookOverviewProps) {
                 d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
               />
             </svg>
-            <span>{book.borrowCount} lượt mượn</span>
+            <span>{book.borrowCount.toLocaleString("vi-VN")} lượt mượn</span>
           </div>
         </div>
 
